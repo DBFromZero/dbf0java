@@ -1,5 +1,7 @@
+package dbf0.socketer_server;
+
 import com.google.common.base.Preconditions;
-import org.apache.commons.codec.binary.Hex;
+import dbf0.Dbf0Util;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -11,10 +13,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Server extends Thread {
-
-  public static final String HOST = "localhost";
-  public static int PORT = 8080;
-  public static int MSG_LENGTH = 32;
 
   private final int nThreads;
   private volatile AtomicReference<ServerSocket> serverSocket = null;
@@ -29,8 +27,8 @@ public class Server extends Thread {
   public void run() {
     try {
       try {
-        serverSocket = new AtomicReference<>(new ServerSocket(PORT, 50, InetAddress.getByName(HOST)));
-        System.out.println("Server is listening ");
+        serverSocket = new AtomicReference<>(new ServerSocket(Constants.PORT, 50, InetAddress.getByName(Constants.HOST)));
+        System.out.println("dbf0.socketer_server.Server is listening ");
         if (nThreads == 1) {
           runSingleThreaded();
         } else {
@@ -94,8 +92,8 @@ public class Server extends Thread {
 
   private void processConnection(Socket socket) {
     try (socket) {
-      var buffer = new byte[MSG_LENGTH];
-      Util.readArrayFully(socket.getInputStream(), buffer);
+      var buffer = new byte[Constants.MSG_LENGTH];
+      Dbf0Util.readArrayFully(socket.getInputStream(), buffer);
       socket.getOutputStream().write(buffer);
     } catch (IOException e) {
       e.printStackTrace();

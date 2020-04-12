@@ -1,8 +1,11 @@
+package dbf0.socketer_server;
+
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
+import dbf0.Dbf0Util;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -47,7 +50,7 @@ public class Benchmark {
         .collect(Collectors.toList());
     Collections.shuffle(specs);
 
-    var results = specs.stream().map(spec -> Util.callUnchecked(() -> {
+    var results = specs.stream().map(spec -> Dbf0Util.callUnchecked(() -> {
       System.out.println("Running: " + spec);
       var server = new Server(spec.serverThreads);
       server.start();

@@ -1,4 +1,7 @@
+package dbf0.socketer_server;
+
 import com.google.common.base.Preconditions;
+import dbf0.Dbf0Util;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.IOException;
@@ -60,17 +63,17 @@ public class Client extends Thread {
 
     @Override
     public void run() {
-      var sendMsg = new byte[Server.MSG_LENGTH];
-      var recvMsg = new byte[Server.MSG_LENGTH];
+      var sendMsg = new byte[Constants.MSG_LENGTH];
+      var recvMsg = new byte[Constants.MSG_LENGTH];
       try {
         while (!interrupted()) {
           random.nextBytes(sendMsg);
-          var s = new Socket(Server.HOST, Server.PORT);
+          var s = new Socket(Constants.HOST, dbf0.socketer_server.Constants.PORT);
           var old = socket.getAndSet(s);
           Preconditions.checkState(old == null);
           try {
             s.getOutputStream().write(sendMsg);
-            Util.readArrayFully(s.getInputStream(), recvMsg);
+            Dbf0Util.readArrayFully(s.getInputStream(), recvMsg);
           } catch (SocketException e) {
             if (socket.get() == null) {
               return;
