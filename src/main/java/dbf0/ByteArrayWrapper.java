@@ -34,4 +34,8 @@ public class ByteArrayWrapper {
   public String toString() {
     return Hex.encodeHexString(array);
   }
+
+  public ByteArrayWrapper copy() {
+    return new ByteArrayWrapper(Arrays.copyOf(array, array.length));
+  }
 }

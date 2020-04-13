@@ -7,7 +7,9 @@ import dbf0.base.BaseConnector;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
@@ -19,25 +21,28 @@ class KeyValueConnector extends BaseConnector {
   private final AtomicInteger setCount;
   private final AtomicInteger getCount;
   private final AtomicInteger findCount;
-  private final AtomicInteger badValueCount;
+  private final AtomicInteger missingKeyCount;
 
   private final Random random;
   private final ByteArrayWrapper key;
   private final ByteArrayWrapper value;
+  private final Set<ByteArrayWrapper> setKeys;
 
   public KeyValueConnector(InetSocketAddress connectAddress, String name, int keyLength, int valueLength,
-                           float setFraction, AtomicInteger setCount, AtomicInteger getCount, AtomicInteger findCount,
-                           AtomicInteger badValueCount) {
+                           float setFraction, boolean trackKeys,
+                           AtomicInteger setCount, AtomicInteger getCount, AtomicInteger findCount,
+                           AtomicInteger missingKeyCount) {
     super(connectAddress, name);
     this.setFraction = setFraction;
     this.getCount = getCount;
     this.findCount = findCount;
     this.setCount = setCount;
-    this.badValueCount = badValueCount;
+    this.missingKeyCount = missingKeyCount;
 
     this.random = new Random();
     this.key = new ByteArrayWrapper(new byte[keyLength]);
     this.value = new ByteArrayWrapper(new byte[valueLength]);
+    this.setKeys = trackKeys ? new HashSet<>() : null;
   }
 
   @Override
@@ -58,6 +63,10 @@ class KeyValueConnector extends BaseConnector {
     PrefixIo.writePrefixLengthBytes(s.getOutputStream(), value);
 
     setCount.getAndIncrement();
+
+    if (setKeys != null) {
+      setKeys.add(key.copy());
+    }
   }
 
   private void performGet(Socket s) throws IOException {
@@ -77,18 +86,17 @@ class KeyValueConnector extends BaseConnector {
       case PrefixIo.FOUND:
         findCount.getAndIncrement();
         var readValue = PrefixIo.readPrefixLengthBytes(s.getInputStream());
-        if (readValue.getArray().length != value.getArray().length) {
-          LOGGER.warning(() -> String.format("incorrect value length %d for %s, expected %d",
-              readValue.getArray().length, key, value.getArray().length));
-        } else {
-          LOGGER.finest(() -> String.format("found %s=%s", key, readValue));
-          if (!readValue.equals(value)) {
-            badValueCount.getAndIncrement();
-          }
+        LOGGER.finest(() -> String.format("found %s=%s", key, readValue));
+        if (!readValue.equals(value)) {
+          LOGGER.warning(() -> String.format("incorrect value for %s: expected %s but given %s",
+              key, value, readValue));
         }
         break;
       case PrefixIo.NOT_FOUND:
         LOGGER.finest("not found");
+        if (setKeys != null && setKeys.contains(key)) {
+          missingKeyCount.getAndIncrement();
+        }
         break;
       default:
         LOGGER.warning("bad result: " + result);

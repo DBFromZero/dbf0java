@@ -1,5 +1,7 @@
 package misc;
 
+import dbf0.ByteArrayWrapper;
+
 import java.util.HashMap;
 import java.util.stream.IntStream;
 
@@ -10,15 +12,25 @@ public class CreateHashMapRaceCondition {
     final var map = new HashMap<>();
     var targetKey = 0b1111_1111_1111_1111; // 65 535
     var targetValue = "v";
-    map.put(targetKey, targetValue);
+    var targetWrapper = makeKey(targetKey);
+    map.put(targetWrapper, targetValue);
 
-    new Thread(() -> IntStream.range(0, targetKey).forEach(key -> map.put(key, "someValue")))
+    new Thread(() -> IntStream.range(0, targetKey).forEach(key -> map.put(makeKey(key), "someValue")))
         .start();
 
     while (true) {
-      if (!targetValue.equals(map.get(targetKey))) {
+      if (!targetValue.equals(map.get(targetWrapper))) {
         throw new RuntimeException("HashMap is not thread safe.");
       }
     }
+  }
+
+  private static ByteArrayWrapper makeKey(int i) {
+    return new ByteArrayWrapper(new byte[]{
+        (byte) i,
+        (byte) (i >> 8),
+        (byte) (i >> 16),
+        (byte) (i >> 24)
+    });
   }
 }
