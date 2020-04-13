@@ -9,6 +9,7 @@ import java.io.OutputStream;
 
 class PrefixIo {
 
+  // prefixes to identify different types of messages
   static final byte SET = (byte) 's';
   static final byte GET = (byte) 'g';
   static final byte FOUND = (byte) 'f';

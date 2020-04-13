@@ -25,10 +25,6 @@ class KeyValueServer extends BaseServer {
     this.map = Preconditions.checkNotNull(map);
   }
 
-  public int size() {
-    return map.size();
-  }
-
   static KeyValueServer hashMapKeyValueServer(InetSocketAddress bindAddress, int nThreads) {
     return new KeyValueServer(bindAddress, nThreads, new HashMap<>());
   }
@@ -39,6 +35,10 @@ class KeyValueServer extends BaseServer {
 
   static KeyValueServer concurrentHashMapKeyValueStore(InetSocketAddress bindAddress, int nThreads) {
     return new KeyValueServer(bindAddress, nThreads, new ConcurrentHashMap<>());
+  }
+
+  public int size() {
+    return map.size();
   }
 
   @Override
@@ -60,14 +60,14 @@ class KeyValueServer extends BaseServer {
   }
 
   private void processSet(Socket socket) throws IOException {
-    ByteArrayWrapper key = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
-    ByteArrayWrapper value = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
+    var key = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
+    var value = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
     LOGGER.finest(() -> "Set " + key + " to " + value);
     map.put(key, value);
   }
 
   private void processGet(Socket socket) throws IOException {
-    ByteArrayWrapper key = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
+    var key = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
     var value = map.get(key);
     if (value == null) {
       LOGGER.finest(() -> "No value for " + key);

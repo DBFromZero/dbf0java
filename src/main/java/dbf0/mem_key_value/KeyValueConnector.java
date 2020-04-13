@@ -1,48 +1,39 @@
 package dbf0.mem_key_value;
 
-import dbf0.ByteArrayWrapper;
 import dbf0.Dbf0Util;
 import dbf0.base.BaseConnector;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.HashSet;
 import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 class KeyValueConnector extends BaseConnector {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(KeyValueConnector.class);
-  private final float setFraction;
 
-  private final AtomicInteger setCount;
-  private final AtomicInteger getCount;
-  private final AtomicInteger findCount;
-  private final AtomicInteger missingKeyCount;
+  private final float setFraction;
+  private final KeyValueSource source;
+  private final KeyValueTracker tracker;
+  private final KeyValueClientStats stats;
 
   private final Random random;
-  private final ByteArrayWrapper key;
-  private final ByteArrayWrapper value;
-  private final Set<ByteArrayWrapper> setKeys;
 
-  public KeyValueConnector(InetSocketAddress connectAddress, String name, int keyLength, int valueLength,
-                           float setFraction, boolean trackKeys,
-                           AtomicInteger setCount, AtomicInteger getCount, AtomicInteger findCount,
-                           AtomicInteger missingKeyCount) {
+  public KeyValueConnector(InetSocketAddress connectAddress, String name,
+                           float setFraction, KeyValueSource source,
+                           KeyValueTracker tracker, KeyValueClientStats stats) {
     super(connectAddress, name);
     this.setFraction = setFraction;
-    this.getCount = getCount;
-    this.findCount = findCount;
-    this.setCount = setCount;
-    this.missingKeyCount = missingKeyCount;
+    this.source = source;
+    this.stats = stats;
+    this.tracker = tracker;
 
     this.random = new Random();
-    this.key = new ByteArrayWrapper(new byte[keyLength]);
-    this.value = new ByteArrayWrapper(new byte[valueLength]);
-    this.setKeys = trackKeys ? new HashSet<>() : null;
+  }
+
+  public KeyValueClientStats getStats() {
+    return stats;
   }
 
   @Override
@@ -55,28 +46,26 @@ class KeyValueConnector extends BaseConnector {
   }
 
   private void performSet(Socket s) throws IOException {
-    randomizeKeyAndComputeValue();
+    var key = source.generateKey();
+    var value = source.generateValueForKey(key);
     LOGGER.finest(() -> "set key " + key + " to " + value);
 
     s.getOutputStream().write(PrefixIo.SET);
     PrefixIo.writePrefixLengthBytes(s.getOutputStream(), key);
     PrefixIo.writePrefixLengthBytes(s.getOutputStream(), value);
 
-    setCount.getAndIncrement();
-
-    if (setKeys != null) {
-      setKeys.add(key.copy());
-    }
+    stats.set.incrementAndGet();
+    tracker.trackSetKey(key);
   }
 
   private void performGet(Socket s) throws IOException {
-    randomizeKeyAndComputeValue();
+    var key = source.generateKey();
     LOGGER.finest(() -> "get key " + key);
 
     s.getOutputStream().write(PrefixIo.GET);
     PrefixIo.writePrefixLengthBytes(s.getOutputStream(), key);
 
-    getCount.getAndIncrement();
+    stats.get.incrementAndGet();
 
     int result = s.getInputStream().read();
     switch (result) {
@@ -84,33 +73,23 @@ class KeyValueConnector extends BaseConnector {
         LOGGER.warning("unexpected end of stream");
         return;
       case PrefixIo.FOUND:
-        findCount.getAndIncrement();
+        stats.found.incrementAndGet();
         var readValue = PrefixIo.readPrefixLengthBytes(s.getInputStream());
         LOGGER.finest(() -> String.format("found %s=%s", key, readValue));
-        if (!readValue.equals(value)) {
+        var expectedValue = source.generateValueForKey(key);
+        if (!readValue.equals(expectedValue)) {
           LOGGER.warning(() -> String.format("incorrect value for %s: expected %s but given %s",
-              key, value, readValue));
+              key, expectedValue, readValue));
         }
         break;
       case PrefixIo.NOT_FOUND:
         LOGGER.finest("not found");
-        if (setKeys != null && setKeys.contains(key)) {
-          missingKeyCount.getAndIncrement();
+        if (tracker.expectKeySet(key)) {
+          stats.missingKey.incrementAndGet();
         }
         break;
       default:
         LOGGER.warning("bad result: " + result);
-    }
-  }
-
-  private void randomizeKeyAndComputeValue() {
-    var k = key.getArray();
-    random.nextBytes(k);
-
-    // for each key, deterministically compute a companion value
-    var v = value.getArray();
-    for (int i = 0; i < v.length; i++) {
-      v[i] = (byte) ~(int) k[i % k.length];
     }
   }
 }
