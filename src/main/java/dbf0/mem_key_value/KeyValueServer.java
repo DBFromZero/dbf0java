@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -24,22 +25,12 @@ class KeyValueServer extends BaseServer {
     this.map = Preconditions.checkNotNull(map);
   }
 
-  static KeyValueServer basicHashMapKeyValueServer(InetSocketAddress bindAddress, int nThreads) {
+  static KeyValueServer hashMapKeyValueServer(InetSocketAddress bindAddress, int nThreads) {
     return new KeyValueServer(bindAddress, nThreads, new HashMap<>());
   }
 
-  static KeyValueServer lockingHashMapKeyValueServer(InetSocketAddress bindAddress, int nThreads) {
-    return new KeyValueServer(bindAddress, nThreads, new HashMap<>() {
-      @Override
-      public synchronized ByteArrayWrapper put(ByteArrayWrapper key, ByteArrayWrapper value) {
-        return super.put(key, value);
-      }
-
-      @Override
-      public synchronized ByteArrayWrapper get(Object key) {
-        return super.get(key);
-      }
-    });
+  static KeyValueServer hashTableKeyValueServer(InetSocketAddress bindAddress, int nThreads) {
+    return new KeyValueServer(bindAddress, nThreads, new Hashtable<>());
   }
 
   static KeyValueServer concurrentHashMapKeyValueStore(InetSocketAddress bindAddress, int nThreads) {

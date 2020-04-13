@@ -28,7 +28,7 @@ public abstract class BaseConnector extends Thread {
 
   @Override
   public void run() {
-    LOGGER.info("Starting connector: " + this);
+    LOGGER.log(Level.FINE, "Starting connector: " + this);
     try {
       while (!interrupted()) {
         LOGGER.log(Level.FINER, () -> "Connecting to: " + connectAddress);
@@ -54,7 +54,7 @@ public abstract class BaseConnector extends Thread {
   private void closeSocketInternal() throws IOException {
     var s = socket.getAndSet(null);
     if (s != null) {
-      LOGGER.log(Level.FINE, () -> "Closing socket for: " + this);
+      LOGGER.log(Level.FINER, () -> "Closing socket for: " + this);
       s.close();
     }
   }
