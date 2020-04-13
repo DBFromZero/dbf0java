@@ -7,9 +7,13 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public abstract class BaseConnector extends Thread {
 
@@ -17,6 +21,13 @@ public abstract class BaseConnector extends Thread {
 
   private final InetSocketAddress connectAddress;
   private final AtomicReference<Socket> socket;
+
+  public static <T extends BaseConnector> List<T> createNConnectors(int n,
+                                                                    Function<String, T> connectorFactory) {
+    return IntStream.range(0, n)
+        .mapToObj(i -> connectorFactory.apply("connector-" + i))
+        .collect(Collectors.toList());
+  }
 
   protected BaseConnector(InetSocketAddress connectAddress, String name) {
     super(name);

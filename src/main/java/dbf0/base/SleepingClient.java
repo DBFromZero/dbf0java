@@ -1,17 +1,15 @@
 package dbf0.base;
 
-import com.google.common.base.Preconditions;
-
 import java.time.Duration;
-import java.util.function.Function;
+import java.util.Collection;
 
 public class SleepingClient extends BaseClient {
 
   private final Duration duration;
 
-  public SleepingClient(int nThreads, Function<String, ? extends BaseConnector> connectorFactory, Duration duration) {
-    super(nThreads, connectorFactory);
-    this.duration = Preconditions.checkNotNull(duration);
+  public SleepingClient(Collection<? extends BaseConnector> connectors, Duration duration) {
+    super(connectors);
+    this.duration = duration;
   }
 
   @Override

@@ -50,7 +50,6 @@ class KeyValueConnector extends BaseConnector {
   }
 
   private void performSet(Socket s) throws IOException {
-    LOGGER.finer("performing set");
     randomizeKeyAndComputeValue();
     LOGGER.finest(() -> "set key " + key + " to " + value);
 
@@ -62,7 +61,6 @@ class KeyValueConnector extends BaseConnector {
   }
 
   private void performGet(Socket s) throws IOException {
-    LOGGER.finer("performing get");
     randomizeKeyAndComputeValue();
     LOGGER.finest(() -> "get key " + key);
 
@@ -83,14 +81,14 @@ class KeyValueConnector extends BaseConnector {
           LOGGER.warning(() -> String.format("incorrect value length %d for %s, expected %d",
               readValue.getArray().length, key, value.getArray().length));
         } else {
-          LOGGER.finest(() -> String.format("get: %s=%s", key, value));
+          LOGGER.finest(() -> String.format("found %s=%s", key, readValue));
           if (!readValue.equals(value)) {
             badValueCount.getAndIncrement();
           }
         }
         break;
       case PrefixIo.NOT_FOUND:
-        LOGGER.finest(() -> "not value for key");
+        LOGGER.finest("not found");
         break;
       default:
         LOGGER.warning("bad result: " + result);
