@@ -3,8 +3,13 @@ package dbf0;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.Callable;
+import java.util.logging.Logger;
 
 public class Dbf0Util {
+
+  public static Logger getLogger(Class<?> c) {
+    return Logger.getLogger(c.getName());
+  }
 
   public static <T> T callUnchecked(Callable<T> callable) {
     try {
