@@ -1,30 +1,21 @@
 package dbf0.mem_key_value;
 
+import dbf0.Dbf0Util;
 import dbf0.base.SleepingClient;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
-import java.util.logging.LogManager;
-import java.util.logging.SimpleFormatter;
 
 public class Benchmark {
 
   private static final InetSocketAddress ADDRESS = new InetSocketAddress("localhost", 9000);
 
   public static void main(String[] args) throws Exception {
-    var rootLogger = LogManager.getLogManager().getLogger("");
-    var handler = new ConsoleHandler();
-    handler.setFormatter(new SimpleFormatter());
+    Dbf0Util.enableConsoleLogging(Level.FINE);
 
-    rootLogger.setLevel(Level.FINE);
-    for (var h : rootLogger.getHandlers()) {
-      h.setLevel(Level.FINE);
-    }
-
-    var server = KeyValueServer.hashMapKeyValueServer(ADDRESS, 4);
+    var server = KeyValueServer.concurrentHashMapKeyValueStore(ADDRESS, 4);
 
     final var setCount = new AtomicInteger(0);
     final var getCount = new AtomicInteger(0);

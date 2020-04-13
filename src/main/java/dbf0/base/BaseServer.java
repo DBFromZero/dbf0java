@@ -48,7 +48,7 @@ public abstract class BaseServer extends Thread {
     Preconditions.checkState(serverSocket.get() == null);
     try {
       try {
-        LOGGER.log(Level.FINE, "connecting to " + bindAddress);
+        LOGGER.log(Level.FINE, "binding to " + bindAddress);
         serverSocket.set(new ServerSocket(bindAddress.getPort(), BACKLOG, bindAddress.getAddress()));
         if (nThreads == 1) {
           runSingleThreaded();

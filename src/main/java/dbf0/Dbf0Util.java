@@ -2,13 +2,24 @@ package dbf0;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.concurrent.Callable;
-import java.util.logging.Logger;
+import java.util.logging.*;
 
 public class Dbf0Util {
 
   public static Logger getLogger(Class<?> c) {
     return Logger.getLogger(c.getName());
+  }
+
+  public static void enableConsoleLogging(Level level) {
+    var rootLogger = LogManager.getLogManager().getLogger("");
+    var handler = new ConsoleHandler();
+    Arrays.stream(rootLogger.getHandlers()).forEach(rootLogger::removeHandler);
+    handler.setFormatter(new SimpleFormatter());
+    rootLogger.addHandler(handler);
+    rootLogger.setLevel(level);
+    handler.setLevel(level);
   }
 
   public static <T> T callUnchecked(Callable<T> callable) {
