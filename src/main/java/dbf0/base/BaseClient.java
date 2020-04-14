@@ -1,6 +1,6 @@
 package dbf0.base;
 
-import dbf0.Dbf0Util;
+import dbf0.common.Dbf0Util;
 
 import java.util.Collection;
 import java.util.logging.Level;

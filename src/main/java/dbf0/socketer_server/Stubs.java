@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static dbf0.Dbf0Util.readArrayFully;
+import static dbf0.common.Dbf0Util.readArrayFully;
 import static dbf0.socketer_server.Constants.*;
 
 /**

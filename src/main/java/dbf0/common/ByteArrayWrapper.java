@@ -1,4 +1,4 @@
-package dbf0;
+package dbf0.common;
 
 import com.google.common.base.Preconditions;
 import org.apache.commons.codec.binary.Hex;

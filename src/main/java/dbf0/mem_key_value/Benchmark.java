@@ -4,9 +4,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
-import dbf0.ByteArrayWrapper;
-import dbf0.Dbf0Util;
 import dbf0.base.SleepingClient;
+import dbf0.common.ByteArrayWrapper;
+import dbf0.common.Dbf0Util;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
