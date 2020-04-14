@@ -20,9 +20,9 @@ class KeyValueConnector extends BaseConnector {
 
   private final Random random;
 
-  public KeyValueConnector(InetSocketAddress connectAddress, String name,
-                           float setFraction, KeyValueSource source,
-                           KeyValueTracker tracker, KeyValueClientStats stats) {
+  KeyValueConnector(InetSocketAddress connectAddress, String name,
+                    float setFraction, KeyValueSource source,
+                    KeyValueTracker tracker, KeyValueClientStats stats) {
     super(connectAddress, name);
     this.setFraction = setFraction;
     this.source = source;

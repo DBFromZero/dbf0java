@@ -37,7 +37,7 @@ class KeyValueServer extends BaseServer {
     return new KeyValueServer(bindAddress, nThreads, new ConcurrentHashMap<>());
   }
 
-  public int size() {
+  int size() {
     return map.size();
   }
 

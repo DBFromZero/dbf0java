@@ -17,12 +17,12 @@ public class CreateHashMapRaceCondition {
     var server = KeyValueServer.hashMapKeyValueServer(ADDRESS, 4);
 
     var smallKeySpaceChecker = new KeyValueConnector(ADDRESS, "checker", 0.2f,
-        new RandomizedKeyValueSource(1, 4),
+        new RandomKeyValueSource(1, 4),
         KeyValueTracker.memoryTracker(),
         new KeyValueClientStats()
     );
     var largeKeySpaceWriter = new KeyValueConnector(ADDRESS, "writer", 1.0f,
-        new RandomizedKeyValueSource(8, 4),
+        new RandomKeyValueSource(8, 4),
         KeyValueTracker.noopTracker(),
         new KeyValueClientStats()
     );
@@ -55,8 +55,8 @@ public class CreateHashMapRaceCondition {
     protected void waitUntilComplete() throws InterruptedException {
       while (true) {
         System.out.println("size: " + server.size());
-        System.out.println(smallKeySpaceChecker.getStats().statsString());
-        System.out.println(largeKeySpaceWriter.getStats().statsString());
+        System.out.println("checker: " + smallKeySpaceChecker.getStats().statsString());
+        System.out.println("writer: " + largeKeySpaceWriter.getStats().statsString());
         System.out.println();
 
         Thread.sleep(500);
