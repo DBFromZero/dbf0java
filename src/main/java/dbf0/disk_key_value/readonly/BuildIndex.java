@@ -14,7 +14,7 @@ public class BuildIndex {
 
   public static void main(String[] args) throws Exception {
     var stream = new PositionTrackingStream(DIRECTORY + "/merged");
-    var iterator = new KeyOnlyFileIterator(stream);
+    var iterator = new KeyOnlyFileIterator(new KeyValueFileReader(stream));
     var storage = new BasicKeyValueStorage(DIRECTORY + "/index");
     storage.initialize();
     int i = 0;

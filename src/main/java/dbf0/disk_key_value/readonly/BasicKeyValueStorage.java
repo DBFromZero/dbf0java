@@ -2,16 +2,15 @@ package dbf0.disk_key_value.readonly;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.EndOfStream;
 import dbf0.common.IoConsumer;
 import dbf0.common.PrefixIo;
 
+import javax.annotation.Nullable;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -21,7 +20,7 @@ public class BasicKeyValueStorage {
   private final String path;
   private transient FileOutputStream stream = null;
 
-  public BasicKeyValueStorage(String path) {
+  BasicKeyValueStorage(String path) {
     this.path = Preconditions.checkNotNull(path);
   }
 
@@ -54,10 +53,10 @@ public class BasicKeyValueStorage {
       try {
         System.out.println("Checking: " + key);
         var storeValue = storage.get(key);
-        if (storeValue.isEmpty()) {
+        if (storeValue == null) {
           throw new RuntimeException("Missing key " + key);
         }
-        if (!storeValue.get().equals(value)) {
+        if (!storeValue.equals(value)) {
           throw new RuntimeException("Values not equal " + value + " expected " + storeValue);
         }
       } catch (IOException e) {
@@ -66,41 +65,35 @@ public class BasicKeyValueStorage {
     });
   }
 
-  public synchronized void initialize() throws IOException {
+  synchronized void initialize() throws IOException {
     Preconditions.checkState(stream == null, "already initialized");
     stream = new FileOutputStream(path, false);
   }
 
-  public synchronized void close() throws IOException {
+  synchronized void close() throws IOException {
     Preconditions.checkState(stream != null, "not initialized");
     stream.close();
   }
 
-  public synchronized void store(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
+  synchronized void store(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
     Preconditions.checkState(stream != null, "not initialized");
     PrefixIo.writeBytes(stream, key);
     PrefixIo.writeBytes(stream, value);
   }
 
-  public Optional<ByteArrayWrapper> get(ByteArrayWrapper key) throws IOException {
-    var input = new FileInputStream(path);
+  @Nullable
+  ByteArrayWrapper get(ByteArrayWrapper key) throws IOException {
+    var reader = new KeyValueFileReader(new FileInputStream(path));
     while (true) {
-      ByteArrayWrapper entryKey;
-      try {
-        entryKey = PrefixIo.readBytes(input);
-      } catch (EndOfStream ignored) {
-        break;
+      var entryKey = reader.readKey();
+      if (entryKey == null) {
+        return null;
       }
       if (entryKey.equals(key)) {
-        return Optional.of(PrefixIo.readBytes(input));
+        return reader.readValue();
       } else {
-        int valueLength = PrefixIo.readLength(input);
-        long skipped = input.skip(valueLength);
-        if (skipped != valueLength) {
-          break;
-        }
+        reader.skipValue();
       }
     }
-    return Optional.empty();
   }
 }

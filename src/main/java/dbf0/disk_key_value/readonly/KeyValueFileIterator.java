@@ -15,7 +15,7 @@ class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayW
   private boolean hasReadNext = false;
   private Pair<ByteArrayWrapper, ByteArrayWrapper> next = null;
 
-  public KeyValueFileIterator(FileInputStream stream) {
+  KeyValueFileIterator(FileInputStream stream) {
     this.stream = stream;
   }
 

@@ -1,22 +1,18 @@
 package dbf0.disk_key_value.readonly;
 
-import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.EndOfStream;
-import dbf0.common.PrefixIo;
 
 import javax.annotation.Nullable;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Iterator;
 
 class KeyOnlyFileIterator implements Iterator<ByteArrayWrapper> {
-  private final FileInputStream stream;
+  private final KeyValueFileReader reader;
   private boolean hasReadNext = false;
   private ByteArrayWrapper next = null;
 
-  public KeyOnlyFileIterator(FileInputStream stream) {
-    this.stream = stream;
+  public KeyOnlyFileIterator(KeyValueFileReader reader) {
+    this.reader = reader;
   }
 
   @Override
@@ -42,15 +38,10 @@ class KeyOnlyFileIterator implements Iterator<ByteArrayWrapper> {
   @Nullable
   private ByteArrayWrapper readNext() {
     try {
-      ByteArrayWrapper key;
-      try {
-        key = PrefixIo.readBytes(stream);
-      } catch (EndOfStream ignored) {
-        return null;
+      var key = reader.readKey();
+      if (key != null) {
+        reader.skipValue();
       }
-      int valueLength = PrefixIo.readLength(stream);
-      long skipped = stream.skip(valueLength);
-      Preconditions.checkState(skipped == valueLength);
       return key;
     } catch (IOException e) {
       throw new RuntimeException(e);
