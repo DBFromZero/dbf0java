@@ -61,14 +61,14 @@ class KeyValueServer extends BaseServer {
   }
 
   private void processSet(Socket socket) throws IOException {
-    var key = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
-    var value = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
+    var key = PrefixIo.readBytes(socket.getInputStream());
+    var value = PrefixIo.readBytes(socket.getInputStream());
     LOGGER.finest(() -> "Set " + key + " to " + value);
     map.put(key, value);
   }
 
   private void processGet(Socket socket) throws IOException {
-    var key = PrefixIo.readPrefixLengthBytes(socket.getInputStream());
+    var key = PrefixIo.readBytes(socket.getInputStream());
     var value = map.get(key);
     if (value == null) {
       LOGGER.finest(() -> "No value for " + key);
@@ -76,7 +76,7 @@ class KeyValueServer extends BaseServer {
     } else {
       LOGGER.finest(() -> "Found value for " + key + " of " + value);
       socket.getOutputStream().write(PrefixIo.FOUND);
-      PrefixIo.writePrefixLengthBytes(socket.getOutputStream(), value);
+      PrefixIo.writeBytes(socket.getOutputStream(), value);
     }
   }
 }

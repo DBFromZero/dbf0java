@@ -52,8 +52,8 @@ class KeyValueConnector extends BaseConnector {
     LOGGER.finest(() -> "set key " + key + " to " + value);
 
     s.getOutputStream().write(PrefixIo.SET);
-    PrefixIo.writePrefixLengthBytes(s.getOutputStream(), key);
-    PrefixIo.writePrefixLengthBytes(s.getOutputStream(), value);
+    PrefixIo.writeBytes(s.getOutputStream(), key);
+    PrefixIo.writeBytes(s.getOutputStream(), value);
 
     stats.set.incrementAndGet();
     tracker.trackSetKey(key);
@@ -64,7 +64,7 @@ class KeyValueConnector extends BaseConnector {
     LOGGER.finest(() -> "get key " + key);
 
     s.getOutputStream().write(PrefixIo.GET);
-    PrefixIo.writePrefixLengthBytes(s.getOutputStream(), key);
+    PrefixIo.writeBytes(s.getOutputStream(), key);
 
     stats.get.incrementAndGet();
 
@@ -75,7 +75,7 @@ class KeyValueConnector extends BaseConnector {
         return;
       case PrefixIo.FOUND:
         stats.found.incrementAndGet();
-        var readValue = PrefixIo.readPrefixLengthBytes(s.getInputStream());
+        var readValue = PrefixIo.readBytes(s.getInputStream());
         LOGGER.finest(() -> String.format("found %s=%s", key, readValue));
         var expectedValue = source.generateValueForKey(key);
         if (!readValue.equals(expectedValue)) {
