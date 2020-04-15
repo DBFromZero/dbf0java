@@ -3,8 +3,12 @@ package dbf0.common;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Iterator;
+import java.util.Spliterators;
 import java.util.concurrent.Callable;
 import java.util.logging.*;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 public class Dbf0Util {
 
@@ -38,5 +42,9 @@ public class Dbf0Util {
     if (i != bs.length) {
       throw new EndOfStream("Failed to read full message. Only read " + i + " bytes");
     }
+  }
+
+  public static <T> Stream<T> iteratorStream(Iterator<T> iterator) {
+    return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, 0), false);
   }
 }

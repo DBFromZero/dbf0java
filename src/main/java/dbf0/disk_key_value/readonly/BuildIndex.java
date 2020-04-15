@@ -1,4 +1,4 @@
-package dbf0.disk_key_value;
+package dbf0.disk_key_value.readonly;
 
 import dbf0.common.ByteArrayWrapper;
 import org.jetbrains.annotations.NotNull;
@@ -8,7 +8,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import static dbf0.disk_key_value.WriteSortedKeyValueFiles.DIRECTORY;
+import static dbf0.disk_key_value.readonly.WriteSortedKeyValueFiles.DIRECTORY;
 
 public class BuildIndex {
 

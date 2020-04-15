@@ -1,21 +1,22 @@
-package dbf0.disk_key_value;
+package dbf0.disk_key_value.readonly;
 
-import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
+import dbf0.common.Dbf0Util;
 import dbf0.common.EndOfStream;
 import dbf0.common.PrefixIo;
+import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Iterator;
 
-class KeyFileIterator implements Iterator<ByteArrayWrapper> {
+class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
   private final FileInputStream stream;
   private boolean hasReadNext = false;
-  private ByteArrayWrapper next = null;
+  private Pair<ByteArrayWrapper, ByteArrayWrapper> next = null;
 
-  public KeyFileIterator(FileInputStream stream) {
+  public KeyValueFileIterator(FileInputStream stream) {
     this.stream = stream;
   }
 
@@ -29,7 +30,7 @@ class KeyFileIterator implements Iterator<ByteArrayWrapper> {
   }
 
   @Override
-  public ByteArrayWrapper next() {
+  public Pair<ByteArrayWrapper, ByteArrayWrapper> next() {
     if (!hasNext()) {
       throw new RuntimeException("no next");
     }
@@ -40,7 +41,7 @@ class KeyFileIterator implements Iterator<ByteArrayWrapper> {
   }
 
   @Nullable
-  private ByteArrayWrapper readNext() {
+  private Pair<ByteArrayWrapper, ByteArrayWrapper> readNext() {
     try {
       int totalLength;
       try {
@@ -50,9 +51,9 @@ class KeyFileIterator implements Iterator<ByteArrayWrapper> {
       }
       var key = PrefixIo.readBytes(stream);
       int valueLength = totalLength - key.length();
-      long skipped = stream.skip(valueLength);
-      Preconditions.checkState(skipped == valueLength);
-      return key;
+      var bytes = new byte[valueLength];
+      Dbf0Util.readArrayFully(stream, bytes);
+      return Pair.of(key, ByteArrayWrapper.of(bytes));
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

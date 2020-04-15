@@ -1,4 +1,4 @@
-package dbf0.disk_key_value;
+package dbf0.disk_key_value.readonly;
 
 import com.codepoetics.protonpack.StreamUtils;
 import dbf0.common.ByteArrayWrapper;

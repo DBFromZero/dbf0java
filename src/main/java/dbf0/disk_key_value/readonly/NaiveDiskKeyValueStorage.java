@@ -1,4 +1,4 @@
-package dbf0.disk_key_value;
+package dbf0.disk_key_value.readonly;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.*;

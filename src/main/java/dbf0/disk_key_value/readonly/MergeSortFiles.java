@@ -1,4 +1,4 @@
-package dbf0.disk_key_value;
+package dbf0.disk_key_value.readonly;
 
 import com.google.common.collect.Iterators;
 import dbf0.common.ByteArrayWrapper;
@@ -9,8 +9,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static dbf0.disk_key_value.WriteSortedKeyValueFiles.DIRECTORY;
-import static dbf0.disk_key_value.WriteSortedKeyValueFiles.FILES;
+import static dbf0.disk_key_value.readonly.WriteSortedKeyValueFiles.DIRECTORY;
+import static dbf0.disk_key_value.readonly.WriteSortedKeyValueFiles.FILES;
 
 public class MergeSortFiles {
 
