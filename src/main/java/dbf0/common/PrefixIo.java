@@ -15,18 +15,35 @@ public class PrefixIo {
 
   public static void writePrefixLengthBytes(OutputStream s, ByteArrayWrapper w) throws IOException {
     var array = w.getArray();
-    if (array.length > Byte.MAX_VALUE) {
-      throw new RuntimeException("Byte array length " + array.length + " is too long");
+    writeLengthRec(s, array.length);
+    if ((array.length & 0xFF) == 0xFF) {
+      s.write(0);
     }
-    s.write(array.length);
     s.write(array);
   }
 
-  public static ByteArrayWrapper readPrefixLengthBytes(InputStream s) throws IOException {
-    var length = s.read();
-    if (length < 0) {
-      throw new RuntimeException("Empty input stream");
+  private static void writeLengthRec(OutputStream s, int remaining) throws IOException {
+    int write = remaining & 0xFF;
+    remaining = remaining >> 8;
+    if (remaining > 0) {
+      writeLengthRec(s, remaining);
     }
+    s.write(write);
+  }
+
+  public static ByteArrayWrapper readPrefixLengthBytes(InputStream s) throws IOException {
+    int length = 0;
+    int next;
+    do {
+      next = s.read();
+      if (next < 0) {
+        throw new RuntimeException("Unexpected end of input stream");
+      }
+      if (next != 0) {
+        length = length << 8;
+        length += next;
+      }
+    } while (next == 0xFF);
     var array = new byte[length];
     Dbf0Util.readArrayFully(s, array);
     return new ByteArrayWrapper(array);
