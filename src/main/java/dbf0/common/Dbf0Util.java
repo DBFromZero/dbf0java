@@ -36,7 +36,7 @@ public class Dbf0Util {
       i += n;
     }
     if (i != bs.length) {
-      throw new RuntimeException("Failed to read full message. Only read " + i + " bytes");
+      throw new EndOfStream("Failed to read full message. Only read " + i + " bytes");
     }
   }
 }

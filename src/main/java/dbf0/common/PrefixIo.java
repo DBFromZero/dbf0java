@@ -44,7 +44,7 @@ public class PrefixIo {
         next = s.read();
       }
       if (next < 0) {
-        throw new RuntimeException("Unexpected end of input stream");
+        throw new EndOfStream("Unexpected end of input stream");
       }
       length += (next << (8 * index++));
     }
