@@ -95,7 +95,7 @@ public class NaiveDiskKeyValueStorage implements KeyValueStorage {
         break;
       }
       var entryKey = PrefixIo.readBytes(input);
-      int valueLength = totalLength - key.length();
+      int valueLength = totalLength - entryKey.length();
       if (entryKey.equals(key)) {
         var bytes = new byte[valueLength];
         Dbf0Util.readArrayFully(input, bytes);
