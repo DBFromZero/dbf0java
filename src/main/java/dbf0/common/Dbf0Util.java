@@ -1,4 +1,4 @@
-package dbf0;
+package dbf0.common;
 
 import java.io.IOException;
 import java.io.InputStream;

@@ -1,7 +1,7 @@
 package dbf0.socketer_server;
 
 import com.google.common.base.Preconditions;
-import dbf0.Dbf0Util;
+import dbf0.common.Dbf0Util;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.IOException;
