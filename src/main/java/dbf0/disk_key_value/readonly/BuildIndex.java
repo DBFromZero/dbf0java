@@ -15,7 +15,7 @@ public class BuildIndex {
   public static void main(String[] args) throws Exception {
     var stream = new PositionTrackingStream(DIRECTORY + "/merged");
     var iterator = new KeyOnlyFileIterator(new KeyValueFileReader(stream));
-    var storage = new BasicKeyValueStorage(DIRECTORY + "/index");
+    var storage = new BasicKeyValueStorage(DIRECTORY + "/index2");
     storage.initialize();
     int i = 0;
     while (true) {
@@ -27,7 +27,7 @@ public class BuildIndex {
       if (i % 10000 == 0) {
         System.out.println("reading " + i);
       }
-      if (i % 1000 == 0) {
+      if (i % 100 == 0) {
         storage.store(key, ByteArrayWrapper.of(ByteBuffer.allocate(8).putLong(position).array()));
       }
       i++;

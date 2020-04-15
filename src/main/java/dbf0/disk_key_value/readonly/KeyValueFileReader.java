@@ -7,10 +7,11 @@ import dbf0.common.PrefixIo;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
+import java.io.Closeable;
 import java.io.FileInputStream;
 import java.io.IOException;
 
-class KeyValueFileReader {
+class KeyValueFileReader implements Closeable {
 
   private final FileInputStream stream;
   private boolean haveReadKey = false;
@@ -21,6 +22,11 @@ class KeyValueFileReader {
 
   KeyValueFileReader(String path) throws IOException {
     this(new FileInputStream(path));
+  }
+
+  @Override
+  public void close() throws IOException {
+    stream.close();
   }
 
   @Nullable

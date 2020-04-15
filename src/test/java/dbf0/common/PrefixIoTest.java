@@ -213,7 +213,7 @@ public class PrefixIoTest {
   @Test
   public void testReadEmptyStream() {
     assertThatThrownBy(() -> read(bw()))
-        .isInstanceOf(RuntimeException.class)
+        .isInstanceOf(EndOfStream.class)
         .hasMessage("Unexpected end of input stream");
   }
 

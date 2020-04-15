@@ -6,6 +6,7 @@ import org.apache.commons.codec.binary.Hex;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
+import java.util.Random;
 
 public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
 
@@ -27,10 +28,6 @@ public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
     return of(bytes);
   }
 
-  public byte[] getArray() {
-    return array;
-  }
-
   public static ByteArrayWrapper cat(ByteArrayWrapper... bws) {
     var total = Arrays.stream(bws).mapToInt(ByteArrayWrapper::length).sum();
     var bytes = new byte[total];
@@ -41,6 +38,16 @@ public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
       offset += a.length;
     }
     return new ByteArrayWrapper(bytes);
+  }
+
+  public static ByteArrayWrapper random(Random random, int length) {
+    var bytes = new byte[length];
+    random.nextBytes(bytes);
+    return of(bytes);
+  }
+
+  public byte[] getArray() {
+    return array;
   }
 
   @Override

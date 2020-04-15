@@ -76,9 +76,13 @@ public class ReadOnlyKeyValueStorage {
   @VisibleForTesting
   @Nullable
   ByteArrayWrapper getForReader(ByteArrayWrapper key, KeyValueFileReader reader) throws IOException {
-    long startIndex = Optional.ofNullable(index.floorEntry(key)).map(Map.Entry::getValue).orElse(0L);
-    reader.skipBytes(startIndex);
+    reader.skipBytes(computeSearchStartIndex(key));
     return scanForKey(key, reader);
+  }
+
+  @VisibleForTesting
+  long computeSearchStartIndex(ByteArrayWrapper key) {
+    return Optional.ofNullable(index.floorEntry(key)).map(Map.Entry::getValue).orElse(0L);
   }
 
   @VisibleForTesting
@@ -102,6 +106,8 @@ public class ReadOnlyKeyValueStorage {
 
   @Nullable
   ByteArrayWrapper get(ByteArrayWrapper key) throws IOException {
-    return getForReader(key, new KeyValueFileReader(path));
+    try (var reader = new KeyValueFileReader(path)) {
+      return getForReader(key, reader);
+    }
   }
 }
