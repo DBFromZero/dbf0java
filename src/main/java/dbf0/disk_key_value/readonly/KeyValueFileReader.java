@@ -19,6 +19,10 @@ class KeyValueFileReader {
     this.stream = stream;
   }
 
+  KeyValueFileReader(String path) throws IOException {
+    this(new FileInputStream(path));
+  }
+
   @Nullable
   ByteArrayWrapper readKey() throws IOException {
     Preconditions.checkState(!haveReadKey);

@@ -1,22 +1,19 @@
 package dbf0.disk_key_value.readonly;
 
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.EndOfStream;
-import dbf0.common.PrefixIo;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Iterator;
 
 class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
-  private final FileInputStream stream;
+  private final KeyValueFileReader reader;
   private boolean hasReadNext = false;
   private Pair<ByteArrayWrapper, ByteArrayWrapper> next = null;
 
-  KeyValueFileIterator(FileInputStream stream) {
-    this.stream = stream;
+  KeyValueFileIterator(KeyValueFileReader reader) {
+    this.reader = reader;
   }
 
   @Override
@@ -42,14 +39,7 @@ class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayW
   @Nullable
   private Pair<ByteArrayWrapper, ByteArrayWrapper> readNext() {
     try {
-      ByteArrayWrapper key;
-      try {
-        key = PrefixIo.readBytes(stream);
-      } catch (EndOfStream ignored) {
-        return null;
-      }
-      ByteArrayWrapper value = PrefixIo.readBytes(stream);
-      return Pair.of(key, value);
+      return reader.readKeyValue();
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
