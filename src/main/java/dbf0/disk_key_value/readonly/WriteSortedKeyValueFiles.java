@@ -12,7 +12,7 @@ import java.util.stream.IntStream;
 public class WriteSortedKeyValueFiles {
 
   public static final int FILES = 20;
-  public static final int KEY_LENGTH = 8;
+  public static final int KEY_LENGTH = 16;
   public static final int VALUE_LENGTH = 4096;
   public static final int FILE_ENTRIES = 100 * 1000;
   public static final String DIRECTORY = "/data/tmp/sorted_kv_files";
@@ -27,9 +27,9 @@ public class WriteSortedKeyValueFiles {
     System.out.println("Generating sorted keys for" + path);
     var sortedKeys = IntStream.range(0, FILE_ENTRIES)
         .mapToObj(ignored -> randomBw.apply(KEY_LENGTH))
-        .sorted(ByteArrayWrapper.comparator());
+        .sorted();
 
-    var storage = new NaiveDiskKeyValueStorage(path);
+    var storage = new BasicKeyValueStorage(path);
     storage.initialize();
 
     StreamUtils.zipWithIndex(sortedKeys).forEach(indexed -> {
@@ -48,7 +48,7 @@ public class WriteSortedKeyValueFiles {
 
   public static void main(String[] args) {
     var random = new Random(0xCAFE);
-    IntStream.range(0, FILES).boxed().forEach(IoConsumer.wrap(index ->
+    IntStream.range(0, FILES).boxed().parallel().forEach(IoConsumer.wrap(index ->
         writeFile(DIRECTORY + "/" + index, random.nextLong())
     ));
   }

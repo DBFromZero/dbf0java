@@ -1,7 +1,10 @@
 package dbf0.disk_key_value.readonly;
 
 import com.google.common.base.Preconditions;
-import dbf0.common.*;
+import dbf0.common.ByteArrayWrapper;
+import dbf0.common.EndOfStream;
+import dbf0.common.IoConsumer;
+import dbf0.common.PrefixIo;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -13,18 +16,18 @@ import java.util.Random;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 
-public class NaiveDiskKeyValueStorage implements KeyValueStorage {
+public class BasicKeyValueStorage {
 
   private final String path;
   private transient FileOutputStream stream = null;
 
-  public NaiveDiskKeyValueStorage(String path) {
+  public BasicKeyValueStorage(String path) {
     this.path = Preconditions.checkNotNull(path);
   }
 
   public static void main(String[] args) throws Exception {
     var path = "/data/tmp/naive_kv";
-    var storage = new NaiveDiskKeyValueStorage(path);
+    var storage = new BasicKeyValueStorage(path);
     storage.initialize();
     var random = new Random(0xCAFE);
     Function<Integer, ByteArrayWrapper> randomBw = (length) -> {
@@ -42,7 +45,7 @@ public class NaiveDiskKeyValueStorage implements KeyValueStorage {
       var key = randomBw.apply(keyLength);
       var value = randomBw.apply(valueLength);
       storage.store(key, value);
-      if (random.nextFloat() > 0.99) {
+      if (random.nextFloat() > 0.999) {
         stored.put(key, value);
       }
     }));
@@ -63,44 +66,35 @@ public class NaiveDiskKeyValueStorage implements KeyValueStorage {
     });
   }
 
-  @Override
   public synchronized void initialize() throws IOException {
     Preconditions.checkState(stream == null, "already initialized");
-    stream = new FileOutputStream(path, true);
+    stream = new FileOutputStream(path, false);
   }
 
-  @Override
   public synchronized void close() throws IOException {
     Preconditions.checkState(stream != null, "not initialized");
     stream.close();
   }
 
-  @Override
   public synchronized void store(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
     Preconditions.checkState(stream != null, "not initialized");
-    int totalLength = key.length() + value.length();
-    PrefixIo.writeLength(stream, totalLength);
     PrefixIo.writeBytes(stream, key);
-    stream.write(value.getArray());
+    PrefixIo.writeBytes(stream, value);
   }
 
-  @Override
   public Optional<ByteArrayWrapper> get(ByteArrayWrapper key) throws IOException {
     var input = new FileInputStream(path);
     while (true) {
-      int totalLength;
+      ByteArrayWrapper entryKey;
       try {
-        totalLength = PrefixIo.readLength(input);
+        entryKey = PrefixIo.readBytes(input);
       } catch (EndOfStream ignored) {
         break;
       }
-      var entryKey = PrefixIo.readBytes(input);
-      int valueLength = totalLength - entryKey.length();
       if (entryKey.equals(key)) {
-        var bytes = new byte[valueLength];
-        Dbf0Util.readArrayFully(input, bytes);
-        return Optional.of(ByteArrayWrapper.of(bytes));
+        return Optional.of(PrefixIo.readBytes(input));
       } else {
+        int valueLength = PrefixIo.readLength(input);
         long skipped = input.skip(valueLength);
         if (skipped != valueLength) {
           break;

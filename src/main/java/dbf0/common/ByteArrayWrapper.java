@@ -3,11 +3,11 @@ package dbf0.common;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import org.apache.commons.codec.binary.Hex;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
-import java.util.Comparator;
 
-public class ByteArrayWrapper {
+public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
 
   private final byte[] array;
 
@@ -56,6 +56,11 @@ public class ByteArrayWrapper {
     return Arrays.hashCode(array);
   }
 
+  @Override
+  public int compareTo(@NotNull ByteArrayWrapper o) {
+    return Arrays.compare(array, o.array);
+  }
+
   public int length() {
     return array.length;
   }
@@ -85,18 +90,5 @@ public class ByteArrayWrapper {
     var s = new byte[end - start];
     System.arraycopy(getArray(), start, s, 0, s.length);
     return new ByteArrayWrapper(s);
-  }
-
-  private static final Comparator<ByteArrayWrapper> COMPARATOR = new ByteArrayWrapperComparator();
-
-  public static Comparator<ByteArrayWrapper> comparator() {
-    return COMPARATOR;
-  }
-
-  private static class ByteArrayWrapperComparator implements Comparator<ByteArrayWrapper> {
-    @Override
-    public int compare(ByteArrayWrapper o1, ByteArrayWrapper o2) {
-      return Arrays.compare(o1.getArray(), o2.getArray());
-    }
   }
 }

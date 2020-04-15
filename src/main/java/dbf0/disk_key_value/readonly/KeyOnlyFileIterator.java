@@ -10,12 +10,12 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Iterator;
 
-class KeyFileIterator implements Iterator<ByteArrayWrapper> {
+class KeyOnlyFileIterator implements Iterator<ByteArrayWrapper> {
   private final FileInputStream stream;
   private boolean hasReadNext = false;
   private ByteArrayWrapper next = null;
 
-  public KeyFileIterator(FileInputStream stream) {
+  public KeyOnlyFileIterator(FileInputStream stream) {
     this.stream = stream;
   }
 
@@ -42,14 +42,13 @@ class KeyFileIterator implements Iterator<ByteArrayWrapper> {
   @Nullable
   private ByteArrayWrapper readNext() {
     try {
-      int totalLength;
+      ByteArrayWrapper key;
       try {
-        totalLength = PrefixIo.readLength(stream);
+        key = PrefixIo.readBytes(stream);
       } catch (EndOfStream ignored) {
         return null;
       }
-      var key = PrefixIo.readBytes(stream);
-      int valueLength = totalLength - key.length();
+      int valueLength = PrefixIo.readLength(stream);
       long skipped = stream.skip(valueLength);
       Preconditions.checkState(skipped == valueLength);
       return key;

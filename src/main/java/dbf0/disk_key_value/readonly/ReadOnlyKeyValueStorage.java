@@ -1,5 +1,6 @@
 package dbf0.disk_key_value.readonly;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
@@ -25,34 +26,42 @@ public class ReadOnlyKeyValueStorage {
 
   public static TreeMap<ByteArrayWrapper, Long> readIndex(String path) throws IOException {
     var iterator = new KeyValueFileIterator(new FileInputStream(path));
-    var index = new TreeMap<ByteArrayWrapper, Long>(ByteArrayWrapper.comparator());
+    var index = new TreeMap<ByteArrayWrapper, Long>();
     Dbf0Util.iteratorStream(iterator).forEach(
         entry -> index.put(entry.getKey(), ByteBuffer.wrap(entry.getValue().getArray()).getLong()));
     return index;
   }
 
   public Optional<ByteArrayWrapper> get(ByteArrayWrapper key) throws IOException {
+    return getForStream(key, new FileInputStream(path));
+  }
+
+  @VisibleForTesting
+  Optional<ByteArrayWrapper> getForStream(ByteArrayWrapper key, FileInputStream stream) throws IOException {
     long startIndex = Optional.ofNullable(index.floorEntry(key)).map(Map.Entry::getValue).orElse(0L);
-    var stream = new FileInputStream(path);
     long skipped = stream.skip(startIndex);
     Preconditions.checkState(skipped == startIndex);
-    var comparator = ByteArrayWrapper.comparator();
+    return scanForKey(key, stream);
+  }
+
+  @VisibleForTesting
+  Optional<ByteArrayWrapper> scanForKey(ByteArrayWrapper key, FileInputStream stream) throws IOException {
     while (true) {
-      int totalLength;
+      int recordTotalLength;
       try {
-        totalLength = PrefixIo.readLength(stream);
+        recordTotalLength = PrefixIo.readLength(stream);
       } catch (EndOfStream ignored) {
         return Optional.empty();
       }
       var entryKey = PrefixIo.readBytes(stream);
-      int valueLength = totalLength - entryKey.length();
-      int cmp = comparator.compare(entryKey, key);
+      int valueLength = recordTotalLength - entryKey.length();
+      int cmp = entryKey.compareTo(key);
       if (cmp == 0) {
         var bytes = new byte[valueLength];
         Dbf0Util.readArrayFully(stream, bytes);
         return Optional.of(ByteArrayWrapper.of(bytes));
       } else if (cmp < 0) {
-        skipped = stream.skip(valueLength);
+        long skipped = stream.skip(valueLength);
         Preconditions.checkState(skipped == valueLength);
       } else {
         return Optional.empty();

@@ -18,9 +18,9 @@ public class MergeSortFiles {
     var iterators = IntStream.range(0, FILES).boxed().map(IoFunction.wrap(index ->
         new KeyValueFileIterator(new FileInputStream(DIRECTORY + "/" + index))))
         .collect(Collectors.toList());
-    var sortedIterator = Iterators.mergeSorted(iterators, Map.Entry.comparingByKey(ByteArrayWrapper.comparator()));
+    var sortedIterator = Iterators.mergeSorted(iterators, Map.Entry.comparingByKey());
     ByteArrayWrapper lastKey = null;
-    var storage = new NaiveDiskKeyValueStorage(DIRECTORY + "/merged");
+    var storage = new BasicKeyValueStorage(DIRECTORY + "/merged");
     storage.initialize();
     int i = 0;
     while (sortedIterator.hasNext()) {

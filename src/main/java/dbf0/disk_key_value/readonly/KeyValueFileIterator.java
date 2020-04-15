@@ -1,7 +1,6 @@
 package dbf0.disk_key_value.readonly;
 
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.Dbf0Util;
 import dbf0.common.EndOfStream;
 import dbf0.common.PrefixIo;
 import org.apache.commons.lang3.tuple.Pair;
@@ -43,17 +42,14 @@ class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayW
   @Nullable
   private Pair<ByteArrayWrapper, ByteArrayWrapper> readNext() {
     try {
-      int totalLength;
+      ByteArrayWrapper key;
       try {
-        totalLength = PrefixIo.readLength(stream);
+        key = PrefixIo.readBytes(stream);
       } catch (EndOfStream ignored) {
         return null;
       }
-      var key = PrefixIo.readBytes(stream);
-      int valueLength = totalLength - key.length();
-      var bytes = new byte[valueLength];
-      Dbf0Util.readArrayFully(stream, bytes);
-      return Pair.of(key, ByteArrayWrapper.of(bytes));
+      ByteArrayWrapper value = PrefixIo.readBytes(stream);
+      return Pair.of(key, value);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
