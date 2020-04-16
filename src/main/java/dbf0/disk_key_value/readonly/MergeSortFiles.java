@@ -38,7 +38,7 @@ public class MergeSortFiles {
     var iterators = IntStream.range(0, sortedFilesCount).boxed().map(IoFunction.wrap(index ->
         new KeyValueFileIterator(new KeyValueFileReader(sortedFilesDirectory + "/" + index))))
         .collect(Collectors.toList());
-    var sortedIterator = Iterators.mergeSorted(iterators, Map.Entry.comparingByKey());
+    @SuppressWarnings("UnstableApiUsage") var sortedIterator = Iterators.mergeSorted(iterators, Map.Entry.comparingByKey());
 
     var indexBuilder = IndexBuilder.multiIndexBuilder(
         indexSpecs.stream().map(MergeSortFiles::createIndexBuilder).collect(Collectors.toList()));
