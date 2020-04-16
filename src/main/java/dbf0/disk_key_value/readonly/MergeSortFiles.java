@@ -8,10 +8,7 @@ import dbf0.common.IoFunction;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.logging.Level;
@@ -49,7 +46,7 @@ public class MergeSortFiles {
     var outputStream = new PositionTrackingStream(outputFilePath);
     var storage = new BasicKeyValueStorage(new BasicKeyValueStorage.StreamFactory() {
       @Override
-      public FileOutputStream out() {
+      public OutputStream out() {
         return outputStream;
       }
 
@@ -98,12 +95,12 @@ public class MergeSortFiles {
     }
   }
 
-  private static class PositionTrackingStream extends FileOutputStream {
+  private static class PositionTrackingStream extends BufferedOutputStream {
 
     private long position = 0;
 
-    public PositionTrackingStream(String name) throws FileNotFoundException {
-      super(name);
+    public PositionTrackingStream(String path) throws FileNotFoundException {
+      super(new FileOutputStream(path), 0x8000);
     }
 
     @Override

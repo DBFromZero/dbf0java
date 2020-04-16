@@ -49,7 +49,7 @@ public class Dbf0Util {
     return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, 0), false);
   }
 
-  public static void requireDirectory(String directory) {
+  public static void requireEmptyDirectory(String directory) {
     var d = new File(directory);
     if (d.isDirectory()) {
       var files = d.list().length;

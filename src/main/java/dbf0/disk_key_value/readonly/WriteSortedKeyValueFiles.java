@@ -40,7 +40,7 @@ public class WriteSortedKeyValueFiles {
     var valueLength = Integer.parseInt(args[2]);
     var entriesCount = Math.round(Float.parseFloat(args[3]));
 
-    Dbf0Util.requireDirectory(directory);
+    Dbf0Util.requireEmptyDirectory(directory);
     IntStream.range(0, fileCount).boxed().parallel().forEach(IoConsumer.wrap(index ->
         writeFile(directory + "/" + index, valueLength, entriesCount)
     ));

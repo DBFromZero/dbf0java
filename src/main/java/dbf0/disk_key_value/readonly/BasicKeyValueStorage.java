@@ -6,9 +6,7 @@ import dbf0.common.IoConsumer;
 import dbf0.common.PrefixIo;
 
 import javax.annotation.Nullable;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -18,7 +16,7 @@ import java.util.stream.IntStream;
 public class BasicKeyValueStorage {
 
   interface StreamFactory {
-    FileOutputStream out() throws IOException;
+    OutputStream out() throws IOException;
 
     FileInputStream in() throws IOException;
   }
@@ -27,8 +25,8 @@ public class BasicKeyValueStorage {
     Preconditions.checkNotNull(path);
     return new StreamFactory() {
       @Override
-      public FileOutputStream out() throws IOException {
-        return new FileOutputStream(path);
+      public BufferedOutputStream out() throws IOException {
+        return new BufferedOutputStream(new FileOutputStream(path), 0x8000);
       }
 
       @Override
@@ -39,7 +37,7 @@ public class BasicKeyValueStorage {
   }
 
   private final StreamFactory streamFactory;
-  private transient FileOutputStream outputStream = null;
+  private transient OutputStream outputStream = null;
 
   BasicKeyValueStorage(StreamFactory streamFactory) {
     this.streamFactory = Preconditions.checkNotNull(streamFactory);
