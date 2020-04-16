@@ -32,14 +32,14 @@ public class Benchmark {
     var store = new ReadOnlyKeyValueStorage(dataPath, ReadOnlyKeyValueStorage.readIndex(indexPath));
     var random = new Random();
 
-    var knownKeys = Dbf0Util.iteratorStream(new KeyOnlyFileIterator(new KeyValueFileReader(knownKeysDataPath)))
-        .limit(keySetSize)
+    var allKnownKeys = Dbf0Util.iteratorStream(new KeyOnlyFileIterator(new KeyValueFileReader(knownKeysDataPath)))
         .collect(Collectors.toList());
-    if (knownKeys.size() < keySetSize) {
-      throw new RuntimeException("Insufficient known keys. Only " + knownKeys.size() +
+    if (allKnownKeys.size() < keySetSize) {
+      throw new RuntimeException("Insufficient known keys. Only " + allKnownKeys.size() +
           " and require " + keySetSize);
     }
-    Collections.shuffle(knownKeys, random);
+    Collections.shuffle(allKnownKeys, random);
+    var knownKeys = allKnownKeys.subList(0, keySetSize);
 
     var unknownKeys = IntStream.range(0, keySetSize).mapToObj(i ->
         ByteArrayWrapper.random(random, WriteSortedKeyValueFiles.KEY_LENGTH))
