@@ -17,16 +17,74 @@ import java.util.stream.IntStream;
 
 public class BasicKeyValueStorage {
 
-  private final String path;
-  private transient FileOutputStream stream = null;
+  interface StreamFactory {
+    FileOutputStream out() throws IOException;
+
+    FileInputStream in() throws IOException;
+  }
+
+  static StreamFactory pathStreamFactory(String path) {
+    Preconditions.checkNotNull(path);
+    return new StreamFactory() {
+      @Override
+      public FileOutputStream out() throws IOException {
+        return new FileOutputStream(path);
+      }
+
+      @Override
+      public FileInputStream in() throws IOException {
+        return new FileInputStream(path);
+      }
+    };
+  }
+
+  private final StreamFactory streamFactory;
+  private transient FileOutputStream outputStream = null;
+
+  BasicKeyValueStorage(StreamFactory streamFactory) {
+    this.streamFactory = Preconditions.checkNotNull(streamFactory);
+  }
 
   BasicKeyValueStorage(String path) {
-    this.path = Preconditions.checkNotNull(path);
+    this.streamFactory = pathStreamFactory(path);
+  }
+
+
+  synchronized void initialize() throws IOException {
+    Preconditions.checkState(outputStream == null, "already initialized");
+    outputStream = streamFactory.out();
+  }
+
+  synchronized void close() throws IOException {
+    Preconditions.checkState(outputStream != null, "not initialized");
+    outputStream.close();
+  }
+
+  synchronized void store(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
+    Preconditions.checkState(outputStream != null, "not initialized");
+    PrefixIo.writeBytes(outputStream, key);
+    PrefixIo.writeBytes(outputStream, value);
+  }
+
+  @Nullable
+  ByteArrayWrapper get(ByteArrayWrapper key) throws IOException {
+    var reader = new KeyValueFileReader(streamFactory.in());
+    while (true) {
+      var entryKey = reader.readKey();
+      if (entryKey == null) {
+        return null;
+      }
+      if (entryKey.equals(key)) {
+        return reader.readValue();
+      } else {
+        reader.skipValue();
+      }
+    }
   }
 
   public static void main(String[] args) throws Exception {
     var path = "/data/tmp/naive_kv";
-    var storage = new BasicKeyValueStorage(path);
+    var storage = new BasicKeyValueStorage(pathStreamFactory(path));
     storage.initialize();
     var random = new Random(0xCAFE);
     Function<Integer, ByteArrayWrapper> randomBw = (length) -> {
@@ -63,37 +121,5 @@ public class BasicKeyValueStorage {
         throw new RuntimeException(e);
       }
     });
-  }
-
-  synchronized void initialize() throws IOException {
-    Preconditions.checkState(stream == null, "already initialized");
-    stream = new FileOutputStream(path, false);
-  }
-
-  synchronized void close() throws IOException {
-    Preconditions.checkState(stream != null, "not initialized");
-    stream.close();
-  }
-
-  synchronized void store(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
-    Preconditions.checkState(stream != null, "not initialized");
-    PrefixIo.writeBytes(stream, key);
-    PrefixIo.writeBytes(stream, value);
-  }
-
-  @Nullable
-  ByteArrayWrapper get(ByteArrayWrapper key) throws IOException {
-    var reader = new KeyValueFileReader(new FileInputStream(path));
-    while (true) {
-      var entryKey = reader.readKey();
-      if (entryKey == null) {
-        return null;
-      }
-      if (entryKey.equals(key)) {
-        return reader.readValue();
-      } else {
-        reader.skipValue();
-      }
-    }
   }
 }
