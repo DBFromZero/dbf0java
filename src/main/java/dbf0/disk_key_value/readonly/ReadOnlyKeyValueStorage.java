@@ -15,10 +15,11 @@ import java.util.Random;
 import java.util.TreeMap;
 import java.util.stream.IntStream;
 
-import static dbf0.disk_key_value.readonly.WriteSortedKeyValueFiles.DIRECTORY;
 import static dbf0.disk_key_value.readonly.WriteSortedKeyValueFiles.KEY_LENGTH;
 
 public class ReadOnlyKeyValueStorage {
+
+  public static final String DIRECTORY = "/data/tmp/sorted_kv_files";
 
   private final String path;
   private final TreeMap<ByteArrayWrapper, Long> index;

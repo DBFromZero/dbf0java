@@ -1,5 +1,6 @@
 package dbf0.common;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
@@ -46,5 +47,19 @@ public class Dbf0Util {
 
   public static <T> Stream<T> iteratorStream(Iterator<T> iterator) {
     return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, 0), false);
+  }
+
+  public static void requireDirectory(String directory) {
+    var d = new File(directory);
+    if (d.isDirectory()) {
+      var files = d.list().length;
+      if (files > 0) {
+        throw new RuntimeException("Directory " + directory + " is not empty. " + files + " found");
+      }
+    } else if (d.exists()) {
+      throw new RuntimeException(directory + " is not a directory");
+    } else if (!d.mkdirs()) {
+      throw new RuntimeException("Failed to create directory");
+    }
   }
 }
