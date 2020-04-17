@@ -32,7 +32,7 @@ public class Benchmark {
     var readThreads = Integer.parseInt(args[5]);
     var duration = Duration.parse(args[6]);
 
-    var store = new ReadOnlyKeyValueStorage(dataPath, ReadOnlyKeyValueStorage.readIndex(indexPath));
+    var store = new RandomAccessKeyValueFileReader(dataPath, RandomAccessKeyValueFileReader.readIndex(indexPath));
     var random = new Random();
 
     var allKnownKeys = Dbf0Util.iteratorStream(new KeyOnlyFileIterator(new KeyValueFileReader(knownKeysDataPath)))

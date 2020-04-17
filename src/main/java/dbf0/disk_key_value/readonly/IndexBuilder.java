@@ -15,7 +15,7 @@ interface IndexBuilder {
 
   void accept(long position, ByteArrayWrapper key) throws IOException;
 
-  static IndexBuilder indexBuilder(BasicKeyValueStorage storage, int indexRate) {
+  static IndexBuilder indexBuilder(KeyValueFileWriter storage, int indexRate) {
     return new IndexBuilderImpl(storage, indexRate);
   }
 
@@ -24,24 +24,23 @@ interface IndexBuilder {
   }
 
   class IndexBuilderImpl implements IndexBuilder {
-    private final BasicKeyValueStorage storage;
+    private final KeyValueFileWriter indexStorage;
     private final int indexRate;
-    private int currentIndex;
+    private int keyCount;
 
-    IndexBuilderImpl(BasicKeyValueStorage storage, int indexRate) {
-      this.storage = Preconditions.checkNotNull(storage);
+    IndexBuilderImpl(KeyValueFileWriter indexStorage, int indexRate) {
+      this.indexStorage = Preconditions.checkNotNull(indexStorage);
       Preconditions.checkArgument(indexRate > 0);
       this.indexRate = indexRate;
-      this.currentIndex = 0;
+      this.keyCount = 0;
     }
 
-    @Override
-    public void accept(long position, ByteArrayWrapper key) throws IOException {
-      if (currentIndex % indexRate == 0) {
-        LOGGER.fine(() -> "writing index at " + currentIndex);
-        storage.store(key, ByteArrayWrapper.of(ByteBuffer.allocate(8).putLong(position).array()));
+    @Override public void accept(long position, ByteArrayWrapper key) throws IOException {
+      if (keyCount % indexRate == 0) {
+        LOGGER.fine(() -> "writing index at " + keyCount);
+        indexStorage.store(key, ByteArrayWrapper.of(ByteBuffer.allocate(8).putLong(position).array()));
       }
-      currentIndex++;
+      keyCount++;
     }
   }
 
@@ -52,8 +51,7 @@ interface IndexBuilder {
       this.indexBuilders = ImmutableList.copyOf(indexBuilders);
     }
 
-    @Override
-    public void accept(long position, ByteArrayWrapper key) throws IOException {
+    @Override public void accept(long position, ByteArrayWrapper key) throws IOException {
       for (var indexBuilder : indexBuilders) {
         indexBuilder.accept(position, key);
       }

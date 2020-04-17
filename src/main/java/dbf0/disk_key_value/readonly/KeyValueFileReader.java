@@ -11,11 +11,11 @@ import java.io.*;
 
 class KeyValueFileReader implements Closeable {
 
-  private final InputStream stream;
+  private transient InputStream inputStream;
   private boolean haveReadKey = false;
 
-  KeyValueFileReader(InputStream stream) {
-    this.stream = stream;
+  KeyValueFileReader(InputStream inputStream) {
+    this.inputStream = inputStream;
   }
 
   KeyValueFileReader(String path) throws IOException {
@@ -23,17 +23,12 @@ class KeyValueFileReader implements Closeable {
     this(new BufferedInputStream(new FileInputStream(path), 0x8000));
   }
 
-  @Override
-  public void close() throws IOException {
-    stream.close();
-  }
-
-  @Nullable
-  ByteArrayWrapper readKey() throws IOException {
+  @Nullable ByteArrayWrapper readKey() throws IOException {
+    Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(!haveReadKey);
     ByteArrayWrapper key;
     try {
-      key = PrefixIo.readBytes(stream);
+      key = PrefixIo.readBytes(inputStream);
     } catch (EndOfStream ignored) {
       return null;
     }
@@ -42,21 +37,22 @@ class KeyValueFileReader implements Closeable {
   }
 
   ByteArrayWrapper readValue() throws IOException {
+    Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(haveReadKey);
-    var value = PrefixIo.readBytes(stream);
+    var value = PrefixIo.readBytes(inputStream);
     haveReadKey = false;
     return value;
   }
 
   void skipValue() throws IOException {
+    Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(haveReadKey);
-    int length = PrefixIo.readLength(stream);
+    int length = PrefixIo.readLength(inputStream);
     skipBytes(length);
     haveReadKey = false;
   }
 
-  @Nullable
-  Pair<ByteArrayWrapper, ByteArrayWrapper> readKeyValue() throws IOException {
+  @Nullable Pair<ByteArrayWrapper, ByteArrayWrapper> readKeyValue() throws IOException {
     var key = readKey();
     if (key == null) {
       return null;
@@ -64,10 +60,17 @@ class KeyValueFileReader implements Closeable {
     return Pair.of(key, readValue());
   }
 
+  @Override public void close() throws IOException {
+    if (inputStream != null) {
+      inputStream.close();
+      inputStream = null;
+    }
+  }
+
   void skipBytes(long bytes) throws IOException {
     long remainingToSkip = bytes;
     while (remainingToSkip > 0) {
-      long skipped = stream.skip(remainingToSkip);
+      long skipped = inputStream.skip(remainingToSkip);
       if (skipped == 0) {
         throw new RuntimeException("Failed to skip " + bytes + " only skipped " + (bytes - remainingToSkip));
       }

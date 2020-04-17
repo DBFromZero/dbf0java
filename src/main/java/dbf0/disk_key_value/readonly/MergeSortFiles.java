@@ -6,9 +6,8 @@ import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.IoFunction;
 import org.apache.commons.lang3.tuple.Pair;
-import org.jetbrains.annotations.NotNull;
 
-import java.io.*;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.logging.Level;
@@ -23,7 +22,7 @@ public class MergeSortFiles {
 
   public static void main(String[] args) throws Exception {
     Preconditions.checkArgument(args.length >= 3);
-    Dbf0Util.enableConsoleLogging(Level.INFO);
+    Dbf0Util.enableConsoleLogging(Level.FINE);
 
     var sortedFilesDirectory = args[0];
     var sortedFilesCount = Integer.parseInt(args[1]);
@@ -35,47 +34,34 @@ public class MergeSortFiles {
     LOGGER.info("Writing " + indexSpecs.size() + " indices");
     indexSpecs.forEach(spec -> LOGGER.info("  Index rate " + spec.getRight() + " in " + spec.getLeft()));
 
-
     var iterators = IntStream.range(0, sortedFilesCount).boxed().map(IoFunction.wrap(index ->
-        new KeyValueFileIterator(new KeyValueFileReader(
-            new BufferedInputStream(new FileInputStream(sortedFilesDirectory + "/" + index), 0x8000)))))
+        new KeyValueFileIterator(new KeyValueFileReader(sortedFilesDirectory + "/" + index))))
         .collect(Collectors.toList());
     @SuppressWarnings("UnstableApiUsage") var sortedIterator = Iterators.mergeSorted(iterators, Map.Entry.comparingByKey());
 
     var indexBuilder = IndexBuilder.multiIndexBuilder(
         indexSpecs.stream().map(MergeSortFiles::createIndexBuilder).collect(Collectors.toList()));
 
-    var outputStream = new PositionTrackingStream(outputFilePath);
-    var storage = new BasicKeyValueStorage(new BasicKeyValueStorage.StreamFactory() {
-      @Override
-      public OutputStream out() {
-        return outputStream;
+    try (var outputStream = new PositionTrackingStream(outputFilePath)) {
+      try (var storage = new KeyValueFileWriter(outputStream)) {
+        ByteArrayWrapper lastKey = null;
+        int i = 0;
+        while (sortedIterator.hasNext()) {
+          var entry = sortedIterator.next();
+          if (i % 10000 == 0) {
+            LOGGER.fine("Writing merged " + i);
+          }
+          i++;
+          if (lastKey != null && lastKey.equals(entry.getKey())) {
+            LOGGER.warning("Skipping duplicate key " + lastKey);
+            continue;
+          }
+          lastKey = entry.getKey();
+          indexBuilder.accept(outputStream.getPosition(), entry.getKey());
+          storage.store(entry.getKey(), entry.getValue());
+        }
       }
-
-      @Override
-      public FileInputStream in() {
-        throw new RuntimeException("input not supported");
-      }
-    });
-    storage.initialize();
-
-    ByteArrayWrapper lastKey = null;
-    int i = 0;
-    while (sortedIterator.hasNext()) {
-      var entry = sortedIterator.next();
-      if (i % 10000 == 0) {
-        LOGGER.info("Writing merged " + i);
-      }
-      i++;
-      if (lastKey != null && lastKey.equals(entry.getKey())) {
-        LOGGER.info("Skipping duplicate key " + lastKey);
-        continue;
-      }
-      lastKey = entry.getKey();
-      indexBuilder.accept(outputStream.position, entry.getKey());
-      storage.store(entry.getKey(), entry.getValue());
     }
-    storage.close();
   }
 
   private static Pair<String, Integer> parseIndexSpec(String spec) {
@@ -88,33 +74,9 @@ public class MergeSortFiles {
 
   private static IndexBuilder createIndexBuilder(Pair<String, Integer> spec) {
     try {
-      var storage = new BasicKeyValueStorage(spec.getLeft());
-      var builder = IndexBuilder.indexBuilder(storage, spec.getRight());
-      storage.initialize();
-      return builder;
+      return IndexBuilder.indexBuilder(new KeyValueFileWriter(spec.getLeft()), spec.getRight());
     } catch (IOException e) {
       throw new RuntimeException(e);
-    }
-  }
-
-  private static class PositionTrackingStream extends BufferedOutputStream {
-
-    private long position = 0;
-
-    public PositionTrackingStream(String path) throws FileNotFoundException {
-      super(new FileOutputStream(path), 0x8000);
-    }
-
-    @Override
-    public void write(int b) throws IOException {
-      super.write(b);
-      position += 1;
-    }
-
-    @Override
-    public void write(@NotNull byte[] b, int off, int len) throws IOException {
-      super.write(b, off, len);
-      position += len;
     }
   }
 }
