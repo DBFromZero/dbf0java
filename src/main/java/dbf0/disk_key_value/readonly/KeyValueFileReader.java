@@ -7,10 +7,7 @@ import dbf0.common.PrefixIo;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
-import java.io.Closeable;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 
 class KeyValueFileReader implements Closeable {
 
@@ -22,7 +19,8 @@ class KeyValueFileReader implements Closeable {
   }
 
   KeyValueFileReader(String path) throws IOException {
-    this(new FileInputStream(path));
+    // by default use a large buffer as it is assumed we'll be reading many entries
+    this(new BufferedInputStream(new FileInputStream(path), 0x8000));
   }
 
   @Override
@@ -67,9 +65,13 @@ class KeyValueFileReader implements Closeable {
   }
 
   void skipBytes(long bytes) throws IOException {
-    long skipped = stream.skip(bytes);
-    if (skipped != bytes) {
-      throw new RuntimeException("Failed to skip " + bytes + " only skipped" + skipped);
+    long remainingToSkip = bytes;
+    while (remainingToSkip > 0) {
+      long skipped = stream.skip(remainingToSkip);
+      if (skipped == 0) {
+        throw new RuntimeException("Failed to skip " + bytes + " only skipped " + (bytes - remainingToSkip));
+      }
+      remainingToSkip -= skipped;
     }
   }
 }
