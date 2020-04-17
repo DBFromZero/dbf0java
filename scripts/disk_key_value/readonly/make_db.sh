@@ -35,8 +35,8 @@ run() {
     java -classpath dbf0java-1.0-SNAPSHOT-jar-with-dependencies.jar $* || exit 1
 }
 
-run dbf0.disk_key_value.readonly.WriteSortedKeyValueFiles \
-    $SORTED_FILE_DIR $SORTED_FILE_COUNT $VALUE_SIZE $SORTED_FILE_ENTRY_COUNT
+#run dbf0.disk_key_value.readonly.WriteSortedKeyValueFiles \
+#    $SORTED_FILE_DIR $SORTED_FILE_COUNT $VALUE_SIZE $SORTED_FILE_ENTRY_COUNT
 
 for INCLUDE_FILE_COUNT in 10 50 250; do
     DB_DIR=${BASE_DIR}/db${INCLUDE_FILE_COUNT}
