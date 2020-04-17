@@ -7,6 +7,7 @@ import dbf0.common.Dbf0Util;
 import dbf0.common.IoConsumer;
 
 import javax.annotation.Nullable;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
@@ -107,7 +108,10 @@ public class ReadOnlyKeyValueStorage {
 
   @Nullable
   ByteArrayWrapper get(ByteArrayWrapper key) throws IOException {
-    try (var reader = new KeyValueFileReader(path)) {
+    // specifically don't use buffered IO cause we hopefully won't have to read much
+    // and we also get to use KeyValueFileReader.skipValue to avoid large segments of data
+    // might be worth benchmarking the effect of buffered IO?
+    try (var reader = new KeyValueFileReader(new FileInputStream(path))) {
       return getForReader(key, reader);
     }
   }
