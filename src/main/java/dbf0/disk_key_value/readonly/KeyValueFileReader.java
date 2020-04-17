@@ -10,13 +10,14 @@ import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 
 class KeyValueFileReader implements Closeable {
 
-  private final FileInputStream stream;
+  private final InputStream stream;
   private boolean haveReadKey = false;
 
-  KeyValueFileReader(FileInputStream stream) {
+  KeyValueFileReader(InputStream stream) {
     this.stream = stream;
   }
 
