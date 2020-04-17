@@ -12,10 +12,13 @@ import java.util.Collections;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class Benchmark {
+
+  private static final Logger LOGGER = Dbf0Util.getLogger(Benchmark.class);
 
   public static void main(String[] args) throws Exception {
     Preconditions.checkArgument(args.length == 7);
@@ -47,26 +50,46 @@ public class Benchmark {
 
     var countGet = new AtomicInteger(0);
     var countFound = new AtomicInteger(0);
+    var errors = new AtomicInteger(0);
 
     var threads = IntStream.range(0, readThreads).mapToObj(i -> new Thread(IoRunnable.wrap(() -> {
-      var threadRandom = new Random();
-      while (!Thread.interrupted()) {
-        var keys = threadRandom.nextFloat() < knownKeyGetFrac ? knownKeys : unknownKeys;
-        var key = keys.get(threadRandom.nextInt(keys.size()));
-        boolean found = store.get(key) != null;
-        countGet.incrementAndGet();
-        if (found) {
-          countFound.incrementAndGet();
+      try {
+        var threadRandom = new Random();
+        while (!Thread.interrupted()) {
+          var keys = threadRandom.nextFloat() < knownKeyGetFrac ? knownKeys : unknownKeys;
+          var key = keys.get(threadRandom.nextInt(keys.size()));
+          boolean found = store.get(key) != null;
+          countGet.incrementAndGet();
+          if (found) {
+            countFound.incrementAndGet();
+          }
         }
+      } catch (Exception e) {
+        errors.incrementAndGet();
+        LOGGER.log(Level.SEVERE, e, () -> "failure");
       }
     }))).collect(Collectors.toList());
 
     threads.forEach(Thread::start);
-    Thread.sleep(duration.toMillis());
-    threads.forEach(Thread::interrupt);
 
+    var sleepInterval = 250L;
+    IntStream.range(0, (int) (duration.toMillis() / sleepInterval)).forEach(ignored -> {
+      try {
+        if (errors.get() == 0) {
+          Thread.sleep(sleepInterval);
+        }
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    threads.forEach(Thread::interrupt);
     for (var thread : threads) {
       thread.join();
+    }
+
+    if (errors.get() > 0) {
+      LOGGER.info("Errors were encountered. Not reporting results.");
+      System.exit(1);
     }
 
     var stats = ImmutableMap.of("get", countGet.get(), "found", countFound.get());

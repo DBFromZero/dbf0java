@@ -110,12 +110,6 @@ public class MergeSortFiles {
     }
 
     @Override
-    public void write(@NotNull byte[] b) throws IOException {
-      super.write(b);
-      position += b.length;
-    }
-
-    @Override
     public void write(@NotNull byte[] b, int off, int len) throws IOException {
       super.write(b, off, len);
       position += len;
