@@ -3,10 +3,12 @@ package dbf0.common;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import org.apache.commons.codec.binary.Hex;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
+import java.util.Random;
 
-public class ByteArrayWrapper {
+public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
 
   private final byte[] array;
 
@@ -26,10 +28,6 @@ public class ByteArrayWrapper {
     return of(bytes);
   }
 
-  public byte[] getArray() {
-    return array;
-  }
-
   public static ByteArrayWrapper cat(ByteArrayWrapper... bws) {
     var total = Arrays.stream(bws).mapToInt(ByteArrayWrapper::length).sum();
     var bytes = new byte[total];
@@ -40,6 +38,16 @@ public class ByteArrayWrapper {
       offset += a.length;
     }
     return new ByteArrayWrapper(bytes);
+  }
+
+  public static ByteArrayWrapper random(Random random, int length) {
+    var bytes = new byte[length];
+    random.nextBytes(bytes);
+    return of(bytes);
+  }
+
+  public byte[] getArray() {
+    return array;
   }
 
   @Override
@@ -53,6 +61,11 @@ public class ByteArrayWrapper {
   @Override
   public int hashCode() {
     return Arrays.hashCode(array);
+  }
+
+  @Override
+  public int compareTo(@NotNull ByteArrayWrapper o) {
+    return Arrays.compare(array, o.array);
   }
 
   public int length() {
