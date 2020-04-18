@@ -58,7 +58,7 @@ public class MergeSortFiles {
           }
           lastKey = entry.getKey();
           indexBuilder.accept(outputStream.getPosition(), entry.getKey());
-          storage.store(entry.getKey(), entry.getValue());
+          storage.append(entry.getKey(), entry.getValue());
         }
       }
     }

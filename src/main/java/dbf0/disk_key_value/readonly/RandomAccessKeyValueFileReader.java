@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
-public class RandomAccessKeyValueFileReader {
+class RandomAccessKeyValueFileReader {
 
   private final String path;
   private final TreeMap<ByteArrayWrapper, Long> index;

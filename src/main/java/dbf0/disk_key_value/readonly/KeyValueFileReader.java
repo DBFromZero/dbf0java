@@ -60,13 +60,6 @@ class KeyValueFileReader implements Closeable {
     return Pair.of(key, readValue());
   }
 
-  @Override public void close() throws IOException {
-    if (inputStream != null) {
-      inputStream.close();
-      inputStream = null;
-    }
-  }
-
   void skipBytes(long bytes) throws IOException {
     long remainingToSkip = bytes;
     while (remainingToSkip > 0) {
@@ -75,6 +68,13 @@ class KeyValueFileReader implements Closeable {
         throw new RuntimeException("Failed to skip " + bytes + " only skipped " + (bytes - remainingToSkip));
       }
       remainingToSkip -= skipped;
+    }
+  }
+
+  @Override public void close() throws IOException {
+    if (inputStream != null) {
+      inputStream.close();
+      inputStream = null;
     }
   }
 }

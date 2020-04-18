@@ -6,21 +6,23 @@ import dbf0.common.PrefixIo;
 
 import java.io.*;
 
-public class KeyValueFileWriter implements Closeable {
+class KeyValueFileWriter implements Closeable {
+
+  private static final int DEFAULT_BUFFER_SIZE = 0x8000;
 
   private transient OutputStream outputStream;
 
   KeyValueFileWriter(OutputStream outputStream) {
     Preconditions.checkNotNull(outputStream);
     this.outputStream = outputStream instanceof BufferedOutputStream ? outputStream :
-        new BufferedOutputStream(outputStream);
+        new BufferedOutputStream(outputStream, DEFAULT_BUFFER_SIZE);
   }
 
   KeyValueFileWriter(String path) throws IOException {
-    this(new BufferedOutputStream(new FileOutputStream(path), 0x8000));
+    this(new FileOutputStream(path));
   }
 
-  public void store(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
+  void append(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
     Preconditions.checkState(outputStream != null, "already closed");
     PrefixIo.writeBytes(outputStream, key);
     PrefixIo.writeBytes(outputStream, value);

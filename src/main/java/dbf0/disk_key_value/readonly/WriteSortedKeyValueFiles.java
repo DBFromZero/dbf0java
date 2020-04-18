@@ -43,7 +43,7 @@ public class WriteSortedKeyValueFiles {
         if (indexed.getIndex() % 10000 == 0) {
           LOGGER.fine(() -> "Writing entry " + indexed.getIndex() + " of " + path);
         }
-        storage.store(indexed.getValue(), ByteArrayWrapper.random(random, valueLength));
+        storage.append(indexed.getValue(), ByteArrayWrapper.random(random, valueLength));
       }));
     }
   }
