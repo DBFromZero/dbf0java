@@ -16,18 +16,18 @@ public class BPTreeExp {
 
 
   public static void main(String[] args) throws Exception {
-    var tree = new BTree<Integer, Integer>(32);
+    var tree = new BTree<Integer, Integer>(16);
     var random = new Random(0xCAFE);
-    IntStream.range(0, 10000).forEach(i -> tree.put(random.nextInt(100000), i));
+    IntStream.range(0, 1000).forEach(i -> tree.put(random.nextInt(100000), i));
 
     System.out.println();
     tree.root.recursivelyPrint(0);
 
-    System.out.println();
-    tree.compact();
+    //System.out.println();
+    //tree.compact();
 
-    System.out.println();
-    tree.root.recursivelyPrint(0);
+    //System.out.println();
+    //tree.root.recursivelyPrint(0);
 
     System.out.println();
     Arrays.stream(((ParentNode) tree.root).children)
@@ -73,45 +73,41 @@ public class BPTreeExp {
     }
   }
 
-  private interface Node<K extends Comparable<K>, V> {
-
-    int getCount();
-
-    int getCapacity();
-
-    default boolean isFull() {
-      return getCount() == getCapacity();
-    }
-
-    int size();
-
-    @Nullable V get(K key);
-
-    Node<K, V> put(K key, V value);
-
-    K maxKey();
-
-    K minKey();
-
-    void recursivelyPrint(int depth);
-  }
-
-  private static abstract class BaseNode<K extends Comparable<K>, V> implements Node<K, V> {
+  private static abstract class Node<K extends Comparable<K>, V> {
     protected final K[] keys;
     protected int count = 0;
+    protected ParentNode<K, V> parent = null;
 
-    protected BaseNode(int capacity) {
+    protected Node(int capacity) {
       Preconditions.checkArgument(capacity > 0 && capacity % 2 == 0);
       this.keys = (K[]) new Comparable[capacity];
     }
 
-    @Override public int getCount() {
+    int getCount() {
       return count;
     }
 
-    @Override public int getCapacity() {
+    int getCapacity() {
       return keys.length;
     }
+
+    boolean isFull() {
+      return getCapacity() == getCount();
+    }
+
+    abstract int size();
+
+    abstract Node<K, V> put(K key, V value);
+
+    @Nullable abstract V get(K key);
+
+    abstract K maxKey();
+
+    abstract K minKey();
+
+    abstract void recursivelyPrint(int depth);
+
+    protected abstract Node<K, V> performSplit(int start, int end);
 
     protected int binarySearch(K key) {
       Preconditions.checkState(count > 0);
@@ -120,42 +116,19 @@ public class BPTreeExp {
 
     protected ParentNode<K, V> split(K keyToAdd) {
       Preconditions.checkState(isFull());
-      var parent = new ParentNode<K, V>(getCapacity());
+      var useCurrentParent = parent != null && !parent.isFull();
+      var splitParent = useCurrentParent ? parent : new ParentNode<K, V>(getCapacity());
+      if (parent != null) {
+        parent.removeNode(this);
+      }
       int mid = count / 2;
-      parent.addNode(keyToAdd.compareTo(keys[mid]) < 0 ? performSplit(0, mid) : performSplit(mid, count));
-      parent.addNode(this);
-      return parent;
-      /*
-      int recSplits = Integer.numberOfTrailingZeros(Integer.highestOneBit(getCapacity()));
-      if (1 << recSplits == getCapacity()) {
-        recSplits--;
-      }
-      System.out.println("do split " + getClass().getSimpleName());
-      recursivelySplit(recSplits, parent, 0, count);
-      System.out.println();
-      return parent;
-       */
+      var split = keyToAdd.compareTo(keys[mid]) < 0 ? performSplit(0, mid) : performSplit(mid, count);
+      splitParent.addNode(split);
+      splitParent.addNode(this);
+      return splitParent;
     }
 
-    /*
-    private void recursivelySplit(int splitLevels, ParentNode<K, V> parent, int start, int end) {
-      System.out.println("rec split " + splitLevels + " " + start + " " + end);
-      if (start < end) {
-        if (splitLevels == 0) {
-          performSplit(parent, start, end);
-        } else {
-          int mid = start + (end - start) / 2;
-          recursivelySplit(splitLevels - 1, parent, start, mid);
-          recursivelySplit(splitLevels - 1, parent, mid, end);
-        }
-      }
-    }
-     */
-
-    protected abstract Node<K, V> performSplit(int start, int end);
-
-    protected void splitHelper(int start, int end, BaseNode<K, V> dest, Object[] srcValues, Object[] destValues) {
-      System.out.println("splitting " + getClass().getSimpleName() + " " + start + " " + end);
+    protected void splitHelper(int start, int end, Node<K, V> dest, Object[] srcValues, Object[] destValues) {
       var elementsToCopy = end - start;
       Preconditions.checkState(elementsToCopy > 0);
       System.arraycopy(srcValues, start, destValues, 0, elementsToCopy);
@@ -185,12 +158,17 @@ public class BPTreeExp {
     }
   }
 
-  private static class LeafNode<K extends Comparable<K>, V> extends BaseNode<K, V> {
+  private static class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
     protected final V[] values;
 
-    public LeafNode(int capacity) {
+    LeafNode(int capacity) {
       super(capacity);
       this.values = (V[]) new Object[capacity];
+    }
+
+    LeafNode(int capacity, ParentNode<K, V> parent) {
+      this(capacity);
+      this.parent = parent;
     }
 
     @Override public int size() {
@@ -227,21 +205,23 @@ public class BPTreeExp {
 
       if (isFull()) {
         return split(key).put(key, value);
-
       }
       var insertIndex = -(index + 1);
       var n = count - insertIndex;
       if (n > 0) {
         arrayShift(keys, insertIndex, n);
         arrayShift(values, insertIndex, n);
+      } else if (parent != null) {
+        parent.updateChildMaxKey(this, keys[count - 1], key);
       }
+
       keys[insertIndex] = key;
       values[insertIndex] = value;
       count++;
       return this;
     }
 
-    @Override protected Node<K, V> performSplit(int start, int end) {
+    @Override protected LeafNode<K, V> performSplit(int start, int end) {
       var newLeaf = new LeafNode<K, V>(getCapacity());
       splitHelper(start, end, newLeaf, values, newLeaf.values);
       return newLeaf;
@@ -280,7 +260,7 @@ public class BPTreeExp {
     }
   }
 
-  private static class ParentNode<K extends Comparable<K>, V> extends BaseNode<K, V> {
+  private static class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     protected final Node<K, V>[] children;
 
     protected ParentNode(int capacity) {
@@ -329,18 +309,47 @@ public class BPTreeExp {
 
       index = -(index + 1);
       if (index == count) {
+        var child = children[index - 1];
+        if (!child.isFull()) {
+          var result = child.put(key, value);
+          Preconditions.checkState(result == child);
+          keys[count - 1] = key;
+          return this;
+        }
+
         if (isFull()) {
           return split(key).put(key, value);
         }
-        children[count] = new LeafNode<K, V>(getCapacity()).put(key, value);
+        children[count] = new LeafNode<K, V>(getCapacity(), this).put(key, value);
         keys[count] = key;
         count++;
         return this;
       }
 
       var child = children[index];
+      Preconditions.checkState(child != this);
+      if (child.parent != this) {
+        System.out.println("debug");
+      }
+      Preconditions.checkState(child.parent == this);
+
+      // if key is in the range of this child, then we have to give it to that child
       if (child.minKey().compareTo(key) <= 0 && child.maxKey().compareTo(key) >= 0) {
-        children[index] = child.put(key, value);
+        var result = child.put(key, value);
+        // put can cause the child to split and it may reuse it's current parent node, which is `this`
+        if (result != this && result != child) {
+          Preconditions.checkState(result.parent == null);
+          result.parent = this;
+          children[index] = result;
+        }
+        return this;
+      }
+
+      // if the child is not full, prefer add node to leaf child rather than creating new node
+      if (child instanceof LeafNode && !child.isFull()) {
+        Preconditions.checkState(key.compareTo(child.minKey()) < 0);
+        var result = child.put(key, value);
+        Preconditions.checkState(result == child);
         return this;
       }
 
@@ -348,17 +357,33 @@ public class BPTreeExp {
         return split(key).put(key, value);
       }
 
-      insertNode(new LeafNode<K, V>(getCapacity()).put(key, value), index);
+      insertNode(new LeafNode<K, V>(getCapacity(), this).put(key, value), index);
       return this;
+    }
+
+    void updateChildMaxKey(Node<K, V> child, K oldMaxKey, K newMaxKey) {
+      var index = binarySearch(oldMaxKey);
+      Preconditions.checkState(index > 0);
+      Preconditions.checkState(children[index] == child);
+      keys[index] = newMaxKey;
+      if (index == count - 1 && parent != null) {
+        parent.updateChildMaxKey(this, oldMaxKey, newMaxKey);
+      }
     }
 
     @Override protected ParentNode<K, V> performSplit(int start, int end) {
       var newParent = new ParentNode<K, V>(getCapacity());
+      for (int i = start; i < end; i++) {
+        Preconditions.checkState(children[i].parent == this);
+        children[i].parent = newParent;
+      }
       splitHelper(start, end, newParent, children, newParent.children);
       return newParent;
     }
 
     void addNode(Node<K, V> node) {
+      Preconditions.checkState(node.parent == null);
+      node.parent = this;
       var maxKey = node.maxKey();
       if (count == 0) {
         keys[0] = maxKey;
@@ -372,6 +397,7 @@ public class BPTreeExp {
     }
 
     private void insertNode(Node<K, V> node, int index) {
+      Preconditions.checkState(node.parent == this);
       var n = count - index;
       if (n > 0) {
         arrayShift(keys, index, n);
@@ -380,6 +406,25 @@ public class BPTreeExp {
       keys[index] = node.maxKey();
       children[index] = node;
       count++;
+    }
+
+    void removeNode(Node<K, V> node) {
+      Preconditions.checkState(node.parent == this);
+      var index = binarySearch(node.maxKey());
+      if (index < 0) {
+        System.out.println("debug");
+      }
+      Preconditions.checkState(index >= 0);
+      Preconditions.checkState(children[index] == node);
+
+      for (int i = index; i < count - 1; i++) {
+        keys[i] = keys[i + 1];
+        children[i] = children[i + 1];
+      }
+      count--;
+      keys[count] = null;
+      children[count] = null;
+      node.parent = null;
     }
 
     void findAdjacentLeavesToCompact() {
@@ -469,7 +514,6 @@ public class BPTreeExp {
       }
     }
   }
-
 
   /**
    * Don't use {@link System#arraycopy} because it makes a temporary array when src and dst are the same
