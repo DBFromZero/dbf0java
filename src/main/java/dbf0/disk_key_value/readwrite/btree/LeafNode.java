@@ -33,10 +33,7 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
     if (index < 0) {
       return null;
     }
-    if (keys[index].equals(key)) {
-      return values[index];
-    }
-    return null;
+    return values[index];
   }
 
   @Override public Node<K, V> put(K key, V value) {
@@ -46,13 +43,11 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
       count++;
       return this;
     }
-
     var index = binarySearch(key);
     if (index >= 0) {
       values[index] = value;
       return this;
     }
-
     if (isFull()) {
       return split(key).put(key, value);
     }
