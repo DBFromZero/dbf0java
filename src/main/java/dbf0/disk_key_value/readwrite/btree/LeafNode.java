@@ -67,10 +67,13 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
     return this;
   }
 
-  @Override void delete(K key) {
+  @Override boolean delete(K key) {
+    if (count == 0) {
+      return false;
+    }
     var index = binarySearch(key);
     if (index < 0) {
-      return;
+      return false;
     }
     int n = count - index - 1;
     var prevMaxKey = maxKey();
@@ -79,7 +82,14 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
       arrayShiftDown(values, index, n);
     }
     count--;
-    parent.handleChildDeleteKey(this, prevMaxKey, maxKey());
+    if (parent != null) {
+      if (count == 0) {
+        parent.deleteChild(this, prevMaxKey);
+      } else {
+        parent.handleChildDeleteKey(this, prevMaxKey, maxKey());
+      }
+    }
+    return true;
   }
 
   @Override protected LeafNode<K, V> performSplit(int start, int end) {

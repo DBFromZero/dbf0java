@@ -48,7 +48,7 @@ public abstract class Node<K extends Comparable<K>, V> {
 
   @Nullable abstract V get(K key);
 
-  abstract void delete(K key);
+  abstract boolean delete(K key);
 
   abstract K maxKey();
 

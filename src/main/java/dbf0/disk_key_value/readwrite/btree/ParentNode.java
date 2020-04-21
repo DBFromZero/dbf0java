@@ -114,12 +114,10 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     return this;
   }
 
-  @Override void delete(K key) {
+  @Override boolean delete(K key) {
     Preconditions.checkState(count > 0);
     var index = binarySearch(key);
-    if (index > 0) {
-      children[index].delete(key);
-    }
+    return index > 0 && children[index].delete(key);
   }
 
   @Override protected ParentNode<K, V> performSplit(int start, int end) {
@@ -133,10 +131,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   void updateChildMaxKey(Node<K, V> child, K oldMaxKey, K newMaxKey) {
-    Preconditions.checkState(child.parent == this);
-    var index = binarySearch(oldMaxKey);
-    Preconditions.checkState(index > 0);
-    Preconditions.checkState(children[index] == child);
+    int index = getChildIndex(child, oldMaxKey);
     keys[index] = newMaxKey;
     if (index == count - 1 && parent != null) {
       parent.updateChildMaxKey(this, oldMaxKey, newMaxKey);
@@ -144,11 +139,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   void handleChildDeleteKey(Node<K, V> child, K oldMaxKey, K newMaxKey) {
-    Preconditions.checkState(child.parent == this);
-    var index = binarySearch(oldMaxKey);
-    Preconditions.checkState(index > 0);
-    Preconditions.checkState(children[index] == child);
-
+    int index = getChildIndex(child, oldMaxKey);
     if (!newMaxKey.equals(oldMaxKey)) {
       keys[index] = newMaxKey;
       if (index == count - 1 && parent != null) {
@@ -158,6 +149,28 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     if (child instanceof LeafNode) {
       checkCombineAdjacentLeaves(index);
     }
+  }
+
+  void deleteChild(Node<K, V> child, K oldMaxKey) {
+    int index = getChildIndex(child, oldMaxKey);
+    arrayShiftDown(keys, index, 1);
+    arrayShiftDown(children, index, 1);
+    count--;
+    if (parent != null) {
+      if (count == 0) {
+        parent.deleteChild(this, oldMaxKey);
+      } else if (index == count) {
+        parent.handleChildDeleteKey(this, oldMaxKey, maxKey());
+      }
+    }
+  }
+
+  private int getChildIndex(Node<K, V> child, K key) {
+    Preconditions.checkState(child.parent == this);
+    var index = binarySearch(key);
+    Preconditions.checkState(index > 0);
+    Preconditions.checkState(children[index] == child);
+    return index;
   }
 
   void addNode(Node<K, V> node) {
