@@ -3,8 +3,10 @@ package dbf0.disk_key_value.readwrite.btree;
 import com.google.common.base.Preconditions;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 public class MemoryBTeeStorage<K extends Comparable<K>, V> implements BTreeStorage<K, V> {
 
@@ -31,5 +33,9 @@ public class MemoryBTeeStorage<K extends Comparable<K>, V> implements BTreeStora
     Preconditions.checkArgument(id >= 0);
     var node = nodes.remove(id);
     Preconditions.checkArgument(node != null, "no such node id %s", id);
+  }
+
+  @Override public Set<Long> getIdsInUse() {
+    return Collections.unmodifiableSet(nodes.keySet());
   }
 }

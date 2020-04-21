@@ -1,8 +1,11 @@
 package dbf0.disk_key_value.readwrite.btree;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Streams;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import java.util.stream.Stream;
 
 public class BTree<K extends Comparable<K>, V> {
   private Node<K, V> root;
@@ -25,13 +28,23 @@ public class BTree<K extends Comparable<K>, V> {
 
   boolean delete(@NotNull K key) {
     var deleted = root.delete(key);
-    if (deleted && root instanceof ParentNode && root.getCount() == 0) {
+    if (deleted && root.getCount() == 0) {
       root = new LeafNode<>(root.getCapacity(), root.storage);
     }
     return deleted;
   }
 
-  Node<K, V> getRoot() {
-    return root;
+  @VisibleForTesting Stream<Long> streamIdsInUse() {
+    return Streams.concat(
+        Stream.of(root.id),
+        Stream.of(root)
+            .filter(ParentNode.class::isInstance)
+            .map(ParentNode.class::cast)
+            .flatMap(ParentNode::streamIdsInUse)
+    );
+  }
+
+  @VisibleForTesting BTreeStorage<K, V> getStorage() {
+    return root.storage;
   }
 }

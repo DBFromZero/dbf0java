@@ -3,6 +3,7 @@ package dbf0.disk_key_value.readwrite.btree;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Streams;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
@@ -46,6 +47,27 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   @Override public K minKey() {
     Preconditions.checkState(count > 0);
     return getChild(0).minKey();
+  }
+
+
+  @Override public void recursivelyPrint(int depth) {
+    var prefix = " -".repeat(depth);
+    System.out.println(prefix + getClass().getSimpleName() + " sz=" + size() +
+        " count=" + getCount() +
+        " from " + minKey() + " to " + maxKey());
+    for (int i = 0; i < count; i++) {
+      getChild(i).recursivelyPrint(depth + 1);
+      System.out.println(prefix + keys[i]);
+    }
+  }
+
+  @Override public String toString() {
+    return baseToStringHelper()
+        .add("children",
+            "[" + Joiner.on(",").join(Arrays.stream(children).limit(count)
+                .map(x -> x == null ? "null" : x)
+                .iterator()) + "]")
+        .toString();
   }
 
   @Nullable @Override public V get(K key) {
@@ -125,7 +147,6 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     //System.out.println("delete key=" + key + " in " + this);
     Preconditions.checkState(count > 0);
     var index = binarySearch(key);
-    //System.out.println("index " +  index);
     if (index < 0) {
       index = invertNegativeBinarySearchIndex(index);
       if (index == count) {
@@ -185,18 +206,28 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   void deleteChild(Node<K, V> child, K oldMaxKey) {
-    if (count == 0) {
-      storage.deleteNode(child.id);
-    }
+    //System.out.println("deleteChild " + child + " in " + this);
     int index = removeChildInternal(child, oldMaxKey);
+    if (count == 0) {
+      storage.deleteNode(id);
+    }
     optionalParent().ifPresent(parent -> {
-      if (this.count == 0) {
+      if (count == 0) {
         parent.deleteChild(this, oldMaxKey);
-
-      } else if (index == this.count) {
+      } else if (index == count) {
         parent.handleChildDeleteKey(this, oldMaxKey, maxKey());
       }
     });
+  }
+
+  Stream<Long> streamIdsInUse() {
+    return Streams.concat(
+        Arrays.stream(children).limit(count),
+        streamChildren()
+            .filter(ParentNode.class::isInstance)
+            .map(ParentNode.class::cast)
+            .flatMap(ParentNode::streamIdsInUse)
+    );
   }
 
   private int removeChildInternal(Node<K, V> child, K oldMaxKey) {
@@ -271,7 +302,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     count++;
   }
 
-  void checkCombineAdjacentLeaves(int index) {
+  private void checkCombineAdjacentLeaves(int index) {
     int start = searchAdjacentLeavesToCombine(index, 0);
     int end = searchAdjacentLeavesToCombine(index, count - 1);
     if (start == end) {
@@ -298,7 +329,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     }
   }
 
-  int searchAdjacentLeavesToCombine(int start, int inclusiveEnd) {
+  private int searchAdjacentLeavesToCombine(int start, int inclusiveEnd) {
     int offset = start < inclusiveEnd ? 1 : -1;
     for (int i = start + offset; i != inclusiveEnd + offset; i += offset) {
       if (!(getChild(i) instanceof LeafNode)) {
@@ -322,6 +353,8 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
             .iterator());
     keys[start] = combined.maxKey();
 
+    Arrays.stream(children, start + 1, start + n).forEach(storage::deleteNode);
+
     int removed = n - 1;
     int endShift = count - removed;
     for (int i = start + 1; i < endShift; i++) {
@@ -341,25 +374,5 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     Preconditions.checkState(keys[count - 1] != null);
 
     Preconditions.checkState(size() == initialSize, "%s!=%s", initialSize, size());
-  }
-
-  @Override public void recursivelyPrint(int depth) {
-    var prefix = " -".repeat(depth);
-    System.out.println(prefix + getClass().getSimpleName() + " sz=" + size() +
-        " count=" + getCount() +
-        " from " + minKey() + " to " + maxKey());
-    for (int i = 0; i < count; i++) {
-      getChild(i).recursivelyPrint(depth + 1);
-      System.out.println(prefix + keys[i]);
-    }
-  }
-
-  @Override public String toString() {
-    return baseToStringHelper()
-        .add("children",
-            "[" + Joiner.on(",").join(Arrays.stream(children).limit(count)
-                .map(x -> x == null ? "null" : x)
-                .iterator()) + "]")
-        .toString();
   }
 }

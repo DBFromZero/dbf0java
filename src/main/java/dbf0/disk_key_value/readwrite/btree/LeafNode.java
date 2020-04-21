@@ -1,9 +1,11 @@
 package dbf0.disk_key_value.readwrite.btree;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import java.util.Arrays;
 import java.util.Iterator;
 
 public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
@@ -82,6 +84,9 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
       arrayShiftDown(values, index, n);
     }
     count--;
+    if (count == 0) {
+      storage.deleteNode(id);
+    }
     optionalParent().ifPresent(parent -> {
       if (count == 0) {
         parent.deleteChild(this, prevMaxKey);
@@ -131,7 +136,7 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
 
   @Override public String toString() {
     return baseToStringHelper()
-        .add("values", values)
+        .add("values", "[" + Joiner.on(",").join(Arrays.stream(values).limit(count).iterator()) + "]")
         .toString();
   }
 }

@@ -1,5 +1,6 @@
 package dbf0.disk_key_value.readwrite.btree;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.squareup.burst.BurstJUnit4;
 import com.squareup.burst.annotation.Burst;
@@ -11,11 +12,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(BurstJUnit4.class)
 public class BTreeTest {
+
+  private static final boolean DEBUG = false;
 
   public enum Capacity {
     C2(2),
@@ -73,8 +77,7 @@ public class BTreeTest {
   }
 
 
-  //TODO: add back burst
-  public void testAddDeleteMany(RandomSeed seed, Count count, KeySetSize keySetSize) {
+  @Test public void testAddDeleteMany(RandomSeed seed, Count count, KeySetSize keySetSize) {
     var random = seed.random();
     Map<Integer, Integer> map = new HashMap<>(count.count);
     var btree = bTree();
@@ -97,11 +100,15 @@ public class BTreeTest {
     map.keySet().forEach(key -> assertThat(btree.delete(key)).describedAs("key=%s", key).isTrue());
 
     assertThat(btree.size()).isEqualTo(0);
+    var idsList = btree.streamIdsInUse().collect(Collectors.toList());
+    assertThat(idsList).hasSize(1);
+    assertThat(btree.getStorage().getIdsInUse()).hasSize(1);
+    assertThat(idsList).hasSameElementsAs(btree.getStorage().getIdsInUse());
   }
 
   public void testManualBurst() {
-    capacity = Capacity.C4;
-    testPutDeleteGet(RandomSeed.CAFE, Count.N50, KeySetSize.S100, PutDeleteGet.PUT_HEAVY, KnownKeyRate.LOW);
+    capacity = Capacity.C2;
+    testPutDeleteGet(RandomSeed.CAFE, Count.N50, KeySetSize.S10, PutDeleteGet.DELETE_HEAVY, KnownKeyRate.LOW);
   }
 
   @Test public void testPutDeleteGet(RandomSeed seed, Count count, KeySetSize keySetSize,
@@ -119,7 +126,7 @@ public class BTreeTest {
       if (r < putDeleteGet.putRate) {
         var value = random.nextInt();
         var key = known ? getKnownKey.get() : random.nextInt(keySetSize.size);
-        //System.out.println("put " + key);
+        print("put " + key);
         Preconditions.checkState(!known || map.containsKey(key));
         map.put(key, value);
         btree.put(key, value);
@@ -128,7 +135,7 @@ public class BTreeTest {
         Preconditions.checkState(known == map.containsKey(key));
         r -= putDeleteGet.putRate;
         if (r < putDeleteGet.getRate) {
-          //System.out.println("get " + key);
+          print("get " + key);
           var a = assertThat(btree.get(key)).describedAs("key=%s", key);
           if (known) {
             a.isEqualTo(map.get(key));
@@ -136,7 +143,7 @@ public class BTreeTest {
             a.isNull();
           }
         } else {
-          //System.out.println("del " + key);
+          print("del " + key);
           var a = assertThat(btree.delete(key)).describedAs("key=%s", key);
           if (known) {
             map.remove(key);
@@ -147,10 +154,20 @@ public class BTreeTest {
         }
       }
       assertThat(btree.size()).isEqualTo(map.size());
+
+      var idsList = btree.streamIdsInUse().collect(Collectors.toList());
+      assertThat(idsList).doesNotHaveDuplicates();
+      assertThat(idsList).hasSameElementsAs(btree.getStorage().getIdsInUse());
     });
   }
 
   private BTree<Integer, Integer> bTree() {
     return new BTree<>(capacity.capacity, new MemoryBTeeStorage<Integer, Integer>());
+  }
+
+  private void print(Object... args) {
+    if (DEBUG) {
+      System.out.println(Joiner.on(" ").join(args));
+    }
   }
 }
