@@ -7,8 +7,8 @@ import javax.annotation.Nullable;
 public class BTree<K extends Comparable<K>, V> {
   private Node<K, V> root;
 
-  public BTree(int capacity) {
-    root = new LeafNode<>(capacity);
+  public BTree(int capacity, BTreeStorage<K, V> storage) {
+    root = new LeafNode<>(capacity, storage);
   }
 
   int size() {
@@ -26,18 +26,12 @@ public class BTree<K extends Comparable<K>, V> {
   boolean delete(@NotNull K key) {
     var deleted = root.delete(key);
     if (deleted && root instanceof ParentNode && root.getCount() == 0) {
-      root = new LeafNode<>(root.getCapacity());
+      root = new LeafNode<>(root.getCapacity(), root.storage);
     }
     return deleted;
   }
 
   Node<K, V> getRoot() {
     return root;
-  }
-
-  void compact() {
-    if (root instanceof ParentNode) {
-      ((ParentNode<K, V>) root).findAdjacentLeavesToCompact();
-    }
   }
 }

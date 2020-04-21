@@ -1,20 +1,22 @@
 package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Preconditions;
+import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import java.util.Iterator;
 
 public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
   protected final V[] values;
 
-  public LeafNode(int capacity) {
-    super(capacity);
+  public LeafNode(int capacity, @NotNull BTreeStorage<K, V> storage) {
+    super(capacity, storage);
     this.values = (V[]) new Object[capacity];
   }
 
   LeafNode(int capacity, ParentNode<K, V> parent) {
-    this(capacity);
-    this.parent = parent;
+    this(capacity, parent.storage);
+    this.setParent(parent);
   }
 
   @Override public int size() {
@@ -79,18 +81,18 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
       arrayShiftDown(values, index, n);
     }
     count--;
-    if (parent != null) {
+    optionalParent().ifPresent(parent -> {
       if (count == 0) {
         parent.deleteChild(this, prevMaxKey);
       } else {
         parent.handleChildDeleteKey(this, prevMaxKey, maxKey());
       }
-    }
+    });
     return true;
   }
 
   @Override protected LeafNode<K, V> performSplit(int start, int end) {
-    var newLeaf = new LeafNode<K, V>(getCapacity());
+    var newLeaf = new LeafNode<K, V>(getCapacity(), storage);
     splitHelper(start, end, newLeaf, values, newLeaf.values);
     return newLeaf;
   }
@@ -117,13 +119,12 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
    * Destructively modifies the first leaf node.
    * Assumes nodes are ordered by key.
    */
-  static <K extends Comparable<K>, V> void combine(Node<K, V>[] nodes, int start, int count) {
-    var compacted = (LeafNode<K, V>) nodes[start];
-    for (int i = start + 1, end = start + count; i < end; i++) {
-      var src = (LeafNode<K, V>) nodes[i];
-      System.arraycopy(src.values, 0, compacted.values, compacted.count, src.count);
-      System.arraycopy(src.keys, 0, compacted.keys, compacted.count, src.count);
-      compacted.count += src.count;
+  static <K extends Comparable<K>, V> void combine(LeafNode<K, V> combined, Iterator<LeafNode<K, V>> iterator) {
+    while (iterator.hasNext()) {
+      var src = iterator.next();
+      System.arraycopy(src.values, 0, combined.values, combined.count, src.count);
+      System.arraycopy(src.keys, 0, combined.keys, combined.count, src.count);
+      combined.count += src.count;
     }
   }
 
