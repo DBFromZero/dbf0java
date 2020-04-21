@@ -11,11 +11,14 @@ public interface BTreeStorage<K extends Comparable<K>, V> {
 
   long allocateNode();
 
-  void storeNode(long id, @NotNull Node<K, V> node);
+  void storeNode(@NotNull Node<K, V> node);
 
   @NotNull Node<K, V> getNode(long id);
 
   void deleteNode(long id);
+
+  default void nodeChanged(@NotNull Node<K, V> node) {
+  }
 
   @VisibleForTesting Set<Long> getIdsInUse();
 }

@@ -17,9 +17,9 @@ public class MemoryBTeeStorage<K extends Comparable<K>, V> implements BTreeStora
     return nextId++;
   }
 
-  @Override public void storeNode(long id, @NotNull Node<K, V> node) {
-    Preconditions.checkArgument(id >= 0);
-    nodes.put(id, node);
+  @Override public void storeNode(@NotNull Node<K, V> node) {
+    Preconditions.checkArgument(node.id >= 0);
+    nodes.put(node.id, node);
   }
 
   @Override @NotNull public Node<K, V> getNode(long id) {

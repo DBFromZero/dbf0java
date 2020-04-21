@@ -16,7 +16,7 @@ public abstract class Node<K extends Comparable<K>, V> {
   protected final K[] keys;
   protected int count = 0;
   @NotNull protected final BTreeStorage<K, V> storage;
-  protected final long id;
+  final long id;
   protected long parentId = BTreeStorage.NO_ID;
 
   protected Node(int capacity, @NotNull BTreeStorage<K, V> storage) {
