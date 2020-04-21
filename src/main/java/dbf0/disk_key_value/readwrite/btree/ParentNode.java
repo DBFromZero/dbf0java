@@ -122,9 +122,17 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   @Override boolean delete(K key) {
+    //System.out.println("delete key=" + key + " in " + this);
     Preconditions.checkState(count > 0);
     var index = binarySearch(key);
-    return index >= 0 && getChild(index).delete(key);
+    //System.out.println("index " +  index);
+    if (index < 0) {
+      index = invertNegativeBinarySearchIndex(index);
+      if (index == count) {
+        return false;
+      }
+    }
+    return getChild(index).delete(key);
   }
 
   @Override protected ParentNode<K, V> performSplit(int start, int end) {
@@ -232,7 +240,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       count++;
       result = this;
     }
-    if (result != this) {
+    if (result == this) {
       optionalParent().ifPresent(parent -> parent.updateChildMaxKey(this, oldMaxKey, key));
     }
     return result;

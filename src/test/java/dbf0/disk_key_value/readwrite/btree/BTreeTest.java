@@ -1,25 +1,23 @@
 package dbf0.disk_key_value.readwrite.btree;
 
+import com.google.common.base.Preconditions;
 import com.squareup.burst.BurstJUnit4;
 import com.squareup.burst.annotation.Burst;
+import dbf0.test.*;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(BurstJUnit4.class)
 public class BTreeTest {
 
-  @Burst Capacity capacity;
-
-  private enum Capacity {
+  public enum Capacity {
     C2(2),
     C4(4),
     C8(8),
@@ -29,59 +27,10 @@ public class BTreeTest {
       this.capacity = capacity;
     }
 
-    private final int capacity;
+    public final int capacity;
   }
 
-  private enum Count {
-    N2(2),
-    N4(4),
-    N10(10),
-    N50(50),
-    N100(100);
-
-    Count(int count) {
-      this.count = count;
-    }
-
-    private final int count;
-
-    private IntStream range() {
-      return IntStream.range(0, count);
-    }
-
-    private <T> Stream<T> times(Supplier<T> supplier) {
-      return range().mapToObj(ignored -> supplier.get());
-    }
-  }
-
-  private enum RandomSeed {
-    CAFE(0xCAFE),
-    DEADBEEF(0xDEADBEEF),
-    BAD(0xBAD);
-
-    private final long seed;
-
-    RandomSeed(long seed) {
-      this.seed = seed;
-    }
-
-    private Random random() {
-      return new Random(seed);
-    }
-  }
-
-  private enum KeySetSize {
-    S1(1),
-    S10(10),
-    S100(100),
-    S1000(1000);
-
-    private final int size;
-
-    KeySetSize(int size) {
-      this.size = size;
-    }
-  }
+  @Burst Capacity capacity;
 
   @Test public void testEmpty() {
     var btree = bTree();
@@ -123,12 +72,9 @@ public class BTreeTest {
     assertThat(btree.get(1)).isEqualTo(3);
   }
 
-  public void testRunAddDeleteMan() {
-    capacity = Capacity.C4;
-    testAddDeleteMany(RandomSeed.CAFE, Count.N100, KeySetSize.S1000);
-  }
 
-  @Test public void testAddDeleteMany(RandomSeed seed, Count count, KeySetSize keySetSize) {
+  //TODO: add back burst
+  public void testAddDeleteMany(RandomSeed seed, Count count, KeySetSize keySetSize) {
     var random = seed.random();
     Map<Integer, Integer> map = new HashMap<>(count.count);
     var btree = bTree();
@@ -139,8 +85,8 @@ public class BTreeTest {
       btree.put(key, value);
       assertThat(btree.size()).isEqualTo(map.size());
     });
-  /*
-    map.forEach((key, value) -> assertThat(btree.get(key)).isEqualTo(value));
+
+    map.forEach((key, value) -> assertThat(btree.get(key)).describedAs("key=%s", key).isEqualTo(value));
 
     count.times(random::nextInt).filter(Predicate.not(map::containsKey))
         .forEach(key -> assertThat(btree.get(key)).isNull());
@@ -148,13 +94,63 @@ public class BTreeTest {
     count.times(random::nextInt).filter(Predicate.not(map::containsKey))
         .forEach(key -> assertThat(btree.delete(key)).isFalse());
 
-    map.keySet().forEach(key -> assertThat(btree.delete(key)).isTrue());
+    map.keySet().forEach(key -> assertThat(btree.delete(key)).describedAs("key=%s", key).isTrue());
 
     assertThat(btree.size()).isEqualTo(0);
-    */
+  }
+
+  public void testManualBurst() {
+    capacity = Capacity.C4;
+    testPutDeleteGet(RandomSeed.CAFE, Count.N50, KeySetSize.S100, PutDeleteGet.PUT_HEAVY, KnownKeyRate.LOW);
+  }
+
+  @Test public void testPutDeleteGet(RandomSeed seed, Count count, KeySetSize keySetSize,
+                                     PutDeleteGet putDeleteGet, KnownKeyRate knownKeyRate) {
+    var random = seed.random();
+    Map<Integer, Integer> map = new HashMap<>(count.count);
+    var btree = bTree();
+
+    Supplier<Integer> getKnownKey = () ->
+        map.keySet().stream().skip(random.nextInt(map.size())).findAny().get();
+
+    count.range().forEach(ignored -> {
+      var known = (!map.isEmpty()) && random.nextDouble() < knownKeyRate.rate;
+      var r = random.nextDouble();
+      if (r < putDeleteGet.putRate) {
+        var value = random.nextInt();
+        var key = known ? getKnownKey.get() : random.nextInt(keySetSize.size);
+        //System.out.println("put " + key);
+        Preconditions.checkState(!known || map.containsKey(key));
+        map.put(key, value);
+        btree.put(key, value);
+      } else {
+        var key = known ? getKnownKey.get() : keySetSize.size + random.nextInt(keySetSize.size);
+        Preconditions.checkState(known == map.containsKey(key));
+        r -= putDeleteGet.putRate;
+        if (r < putDeleteGet.getRate) {
+          //System.out.println("get " + key);
+          var a = assertThat(btree.get(key)).describedAs("key=%s", key);
+          if (known) {
+            a.isEqualTo(map.get(key));
+          } else {
+            a.isNull();
+          }
+        } else {
+          //System.out.println("del " + key);
+          var a = assertThat(btree.delete(key)).describedAs("key=%s", key);
+          if (known) {
+            map.remove(key);
+            a.isTrue();
+          } else {
+            a.isFalse();
+          }
+        }
+      }
+      assertThat(btree.size()).isEqualTo(map.size());
+    });
   }
 
   private BTree<Integer, Integer> bTree() {
-    return new BTree<>(capacity.capacity);
+    return new BTree<>(capacity.capacity, new MemoryBTeeStorage<Integer, Integer>());
   }
 }

@@ -67,6 +67,7 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   @Override boolean delete(K key) {
+    //System.out.println("delete key=" + key + " in " + this);
     if (count == 0) {
       return false;
     }

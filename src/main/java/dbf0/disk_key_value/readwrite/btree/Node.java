@@ -71,7 +71,7 @@ public abstract class Node<K extends Comparable<K>, V> {
 
   @NotNull protected MoreObjects.ToStringHelper baseToStringHelper() {
     return MoreObjects.toStringHelper(this)
-        .add("hash", hashCode())
+        .add("id", id)
         .add("keys",
             "[" + Joiner.on(",").join(Arrays.stream(keys).limit(count)
                 .map(x -> x == null ? "null" : x)
