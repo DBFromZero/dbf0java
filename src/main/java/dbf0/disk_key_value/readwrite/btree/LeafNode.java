@@ -57,10 +57,7 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
     if (n > 0) {
       arrayShiftUp(keys, insertIndex, n);
       arrayShiftUp(values, insertIndex, n);
-    } else if (parent != null) {
-      parent.updateChildMaxKey(this, keys[count - 1], key);
     }
-
     keys[insertIndex] = key;
     values[insertIndex] = value;
     count++;
@@ -128,5 +125,11 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
       System.arraycopy(src.keys, 0, compacted.keys, compacted.count, src.count);
       compacted.count += src.count;
     }
+  }
+
+  @Override public String toString() {
+    return baseToStringHelper()
+        .add("values", values)
+        .toString();
   }
 }

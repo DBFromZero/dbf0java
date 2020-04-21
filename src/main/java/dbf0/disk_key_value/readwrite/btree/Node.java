@@ -1,11 +1,14 @@
 package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.stream.Collectors;
 
 public abstract class Node<K extends Comparable<K>, V> {
 
@@ -116,7 +119,23 @@ public abstract class Node<K extends Comparable<K>, V> {
   }
 
   static void arrayShiftDown(Object[] array, int index, int count) {
-    Preconditions.checkState(index > 0 && index >= count);
-    System.arraycopy(array, index, array, index - 1, count);
+    Preconditions.checkState(index >= 0);
+    Preconditions.checkState(index + count < array.length);
+    System.arraycopy(array, index + 1, array, index, count);
+  }
+
+  @Override public String toString() {
+    return baseToStringHelper().toString();
+  }
+
+  @NotNull protected MoreObjects.ToStringHelper baseToStringHelper() {
+    return MoreObjects.toStringHelper(this)
+        .add("hash", hashCode())
+        .add("keys",
+            "[" + Joiner.on(",").join(Arrays.stream(keys).limit(count)
+                .map(x -> x == null ? "null" : x)
+                .collect(Collectors.toList())) + "]")
+        .add("count", count)
+        .add("parent", parent == null ? "null" : parent.hashCode());
   }
 }

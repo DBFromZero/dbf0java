@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.stream.Collectors;
 
 class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   protected final Node<K, V>[] children;
@@ -50,12 +51,19 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
 
   @Override public Node<K, V> put(K key, V value) {
     Preconditions.checkState(count > 0);
+    if (false) {
+      System.out.println(Joiner.on(" ").join("parent put",
+          key,
+          "sz=" + size(),
+          this
+      ));
+    }
 
     var index = binarySearch(key);
     if (index >= 0) {
       var child = children[index];
       var result = child.put(key, value);
-      Preconditions.checkState(child == result, "should not split for existing key");
+      Preconditions.checkState(child == result, "should not split for existing maxKey");
       return this;
     }
 
@@ -73,14 +81,20 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       var result = child.put(key, value);
       // put can cause the child to split and it may reuse it's current parent node, which is `this`
       if (result != this && result != child) {
-        Preconditions.checkState(result.parent == null);
-        result.parent = this;
-        children[index] = result;
+        // child.put(k,v) can lead to child.split().put(k, v)
+        // if the split reuse this node then we recurse into call this.put again
+        // if on this second call we're full, then we split and created a new node above us
+        // hence it is possible for the result of child.put(k, v) to return a node that
+        // is actually our new parent
+        if (this.parent == result) {
+          return result;
+        }
+        addNode(result);
       }
       return this;
     }
 
-    // if the child is not full, prefer to add entry to leaf child rather than creating new node
+    // if the child is not full, prefer to add entry to existing leaf child rather than creating new node
     if (child instanceof LeafNode && !child.isFull()) {
       Preconditions.checkState(key.compareTo(child.minKey()) < 0);
       var result = child.put(key, value);
@@ -89,28 +103,10 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     }
 
     if (isFull()) {
-      return split(key).put(key, value);
+      return putFull(key, value, child);
     }
 
-    insertNode(new LeafNode<K, V>(getCapacity(), this).put(key, value), index);
-    return this;
-  }
-
-  private Node<K, V> putNewMaxKey(K key, V value) {
-    var child = children[count - 1];
-    if (!child.isFull()) {
-      var result = child.put(key, value);
-      Preconditions.checkState(result == child);
-      keys[count - 1] = key;
-      return this;
-    }
-
-    if (isFull()) {
-      return split(key).put(key, value);
-    }
-    children[count] = new LeafNode<K, V>(getCapacity(), this).put(key, value);
-    keys[count] = key;
-    count++;
+    insertNode(new LeafNode<>(getCapacity(), this).put(key, value), index);
     return this;
   }
 
@@ -130,12 +126,29 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     return newParent;
   }
 
+  void addNode(Node<K, V> node) {
+    Preconditions.checkState(node.parent == null || node.parent == this);
+    Preconditions.checkState(node != parent, "%s cannot contain its parent %s", this, parent);
+    node.parent = this;
+    var maxKey = node.maxKey();
+    if (count == 0) {
+      keys[0] = maxKey;
+      children[0] = node;
+      count++;
+      return;
+    }
+    var index = binarySearch(maxKey);
+    Preconditions.checkState(index < 0);
+    insertNode(node, -(index + 1));
+  }
+
+  void removeNode(Node<K, V> node) {
+    removeChildInternal(node, node.maxKey());
+  }
+
   void updateChildMaxKey(Node<K, V> child, K oldMaxKey, K newMaxKey) {
     int index = getChildIndex(child, oldMaxKey);
     keys[index] = newMaxKey;
-    if (index == count - 1 && parent != null) {
-      parent.updateChildMaxKey(this, oldMaxKey, newMaxKey);
-    }
   }
 
   void handleChildDeleteKey(Node<K, V> child, K oldMaxKey, K newMaxKey) {
@@ -152,40 +165,73 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   void deleteChild(Node<K, V> child, K oldMaxKey) {
-    int index = getChildIndex(child, oldMaxKey);
-    arrayShiftDown(keys, index, 1);
-    arrayShiftDown(children, index, 1);
-    count--;
+    int index = removeChildInternal(child, oldMaxKey);
     if (parent != null) {
-      if (count == 0) {
+      if (this.count == 0) {
         parent.deleteChild(this, oldMaxKey);
-      } else if (index == count) {
+      } else if (index == this.count) {
         parent.handleChildDeleteKey(this, oldMaxKey, maxKey());
       }
     }
   }
 
+  private int removeChildInternal(Node<K, V> child, K oldMaxKey) {
+    int index = getChildIndex(child, oldMaxKey);
+    child.parent = null;
+    int n = this.count - index - 1;
+    if (n > 0) {
+      arrayShiftDown(keys, index, n);
+      arrayShiftDown(children, index, n);
+    } else {
+      keys[index] = null;
+      children[index] = null;
+    }
+    this.count--;
+    return index;
+  }
+
   private int getChildIndex(Node<K, V> child, K key) {
     Preconditions.checkState(child.parent == this);
     var index = binarySearch(key);
-    Preconditions.checkState(index > 0);
+    Preconditions.checkState(index >= 0, "no key %s in %s", key, this);
     Preconditions.checkState(children[index] == child);
     return index;
   }
 
-  void addNode(Node<K, V> node) {
-    Preconditions.checkState(node.parent == null);
-    node.parent = this;
-    var maxKey = node.maxKey();
-    if (count == 0) {
-      keys[0] = maxKey;
-      children[0] = node;
+  private Node<K, V> putNewMaxKey(K key, V value) {
+    Node<K, V> result;
+    var oldMaxKey = keys[count - 1];
+    var child = children[count - 1];
+    if (!child.isFull()) {
+      var putResult = child.put(key, value);
+      Preconditions.checkState(putResult == child);
+      keys[count - 1] = key;
+      result = this;
+    } else if (isFull()) {
+      result = putFull(key, value, child);
+    } else {
+      children[count] = new LeafNode<K, V>(getCapacity(), this).put(key, value);
+      keys[count] = key;
       count++;
-      return;
+      result = this;
     }
-    var index = binarySearch(maxKey);
-    Preconditions.checkState(index < 0);
-    insertNode(node, -(index + 1));
+    if (parent != null && result == this) {
+      parent.updateChildMaxKey(this, oldMaxKey, key);
+    }
+    return result;
+  }
+
+  private Node<K, V> putFull(K key, V value, Node<K, V> child) {
+    // splitting at capacity 2 won't allow us to insert a new leaf node since we'll still have
+    // two children. instead have to push the key down to a LeafNode
+    if (getCapacity() == 2) {
+      var result = child.put(key, value);
+      if (result != child) {
+        addNode(result);
+      }
+      return this;
+    }
+    return split(key).put(key, value);
   }
 
   private void insertNode(Node<K, V> node, int index) {
@@ -198,25 +244,6 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     keys[index] = node.maxKey();
     children[index] = node;
     count++;
-  }
-
-  void removeNode(Node<K, V> node) {
-    Preconditions.checkState(node.parent == this);
-    var index = binarySearch(node.maxKey());
-    if (index < 0) {
-      System.out.println("debug");
-    }
-    Preconditions.checkState(index >= 0);
-    Preconditions.checkState(children[index] == node);
-
-    for (int i = index; i < count - 1; i++) {
-      keys[i] = keys[i + 1];
-      children[i] = children[i + 1];
-    }
-    count--;
-    keys[count] = null;
-    children[count] = null;
-    node.parent = null;
   }
 
   void checkCombineAdjacentLeaves(int index) {
@@ -335,5 +362,14 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       children[i].recursivelyPrint(depth + 1);
       System.out.println(prefix + keys[i]);
     }
+  }
+
+  @Override public String toString() {
+    return baseToStringHelper()
+        .add("children",
+            "[" + Joiner.on(",").join(Arrays.stream(children).limit(count)
+                .map(x -> x == null ? "null" : x.hashCode())
+                .collect(Collectors.toList())) + "]")
+        .toString();
   }
 }
