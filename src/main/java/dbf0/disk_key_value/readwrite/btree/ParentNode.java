@@ -15,14 +15,14 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   // use boxed array so that it can be passed to generic Object[] methods
   private final Long[] childIds;
 
-  ParentNode(int capacity, @NotNull BTreeStorage<K, V> storage) {
-    super(capacity, storage);
+  ParentNode(long id, int capacity, @NotNull BTreeStorage<K, V> storage) {
+    super(id, capacity, storage);
     this.childIds = new Long[capacity];
   }
 
-  @VisibleForTesting ParentNode(int count, @NotNull K[] keys, @NotNull Long[] childIds,
+  @VisibleForTesting ParentNode(long id, int count, @NotNull K[] keys, @NotNull Long[] childIds,
                                 @NotNull BTreeStorage<K, V> storage) {
-    super(count, keys, storage);
+    super(id, BTreeStorage.NO_ID, count, keys, storage);
     Preconditions.checkState(keys.length == childIds.length);
     this.childIds = childIds;
   }
@@ -140,7 +140,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       Preconditions.checkState(key.compareTo(child.minKey()) < 0);
       var result = child.put(key, value);
       Preconditions.checkState(result == child);
-      storage.nodeChanged(this);
+      nodeChanged();
       return this;
     }
 
@@ -148,9 +148,10 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       return putFull(key, value, child);
     }
 
-    insertNode(new LeafNode<>(getCapacity(), this).put(key, value), index);
+    insertNode(createLeaf(key, value), index);
     return this;
   }
+
 
   @Override boolean delete(K key) {
     //System.out.println("delete key=" + key + " in " + this);
@@ -162,11 +163,15 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
         return false;
       }
     }
-    return getChild(index).delete(key);
+    var deleted = getChild(index).delete(key);
+    if (deleted && count == 0) {
+      storage.deleteNode(id);
+    }
+    return deleted;
   }
 
   @Override protected ParentNode<K, V> performSplit(int start, int end) {
-    var newParent = new ParentNode<>(getCapacity(), storage);
+    var newParent = storage.createParent();
     for (int i = start; i < end; i++) {
       var child = getChild(i);
       Preconditions.checkState(child.getParentId() == this.id);
@@ -199,33 +204,30 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   void updateChildMaxKey(Node<K, V> child, K oldMaxKey, K newMaxKey) {
     int index = getChildIndex(child, oldMaxKey);
     keys[index] = newMaxKey;
+    nodeChanged();
   }
 
   void handleChildDeleteKey(Node<K, V> child, K oldMaxKey, K newMaxKey) {
     int index = getChildIndex(child, oldMaxKey);
-    var storedNeeded = false;
+    var changed = false;
     if (!newMaxKey.equals(oldMaxKey)) {
       keys[index] = newMaxKey;
-      storedNeeded = true;
+      changed = true;
       if (index == count - 1) {
         optionalParent().ifPresent(parent -> parent.handleChildDeleteKey(this, oldMaxKey, newMaxKey));
       }
     }
     if (child instanceof LeafNode) {
       checkCombineAdjacentLeaves(index);
-      storedNeeded = true;
+      changed = true;
     }
-    if (storedNeeded) {
-      storage.nodeChanged(this);
+    if (changed) {
+      nodeChanged();
     }
   }
 
   void deleteChild(Node<K, V> child, K oldMaxKey) {
-    //System.out.println("deleteChild " + child + " in " + this);
     int index = removeChildInternal(child, oldMaxKey);
-    if (count == 0) {
-      storage.deleteNode(id);
-    }
     optionalParent().ifPresent(parent -> {
       if (count == 0) {
         parent.deleteChild(this, oldMaxKey);
@@ -249,6 +251,13 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     return Arrays.asList(childIds).subList(0, count);
   }
 
+  @NotNull private LeafNode<K, V> createLeaf(K key, V value) {
+    var leaf = storage.createLeaf();
+    leaf.setParent(this);
+    leaf.put(key, value);
+    return leaf;
+  }
+
   private int removeChildInternal(Node<K, V> child, K oldMaxKey) {
     int index = getChildIndex(child, oldMaxKey);
     child.clearParent();
@@ -261,8 +270,9 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       childIds[index] = null;
     }
     this.count--;
+    // count==0 for deletion is handled in delete(key)
     if (count > 0) {
-      storage.nodeChanged(this);
+      nodeChanged();
     }
     return index;
   }
@@ -283,16 +293,16 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       var putResult = child.put(key, value);
       Preconditions.checkState(putResult == child);
       keys[count - 1] = key;
-      storage.nodeChanged(this);
+      nodeChanged();
       result = this;
     } else if (isFull()) {
       result = putFull(key, value, child);
     } else {
-      var newChild = new LeafNode<K, V>(getCapacity(), this).put(key, value);
+      var newChild = createLeaf(key, value);
       childIds[count] = newChild.id;
       keys[count] = key;
       count++;
-      storage.nodeChanged(this);
+      nodeChanged();
       result = this;
     }
     if (result == this) {
@@ -324,7 +334,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     keys[index] = node.maxKey();
     childIds[index] = node.id;
     count++;
-    storage.nodeChanged(this);
+    nodeChanged();
   }
 
   private void checkCombineAdjacentLeaves(int index) {
@@ -395,10 +405,10 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       childIds[i] = null;
     }
     count -= removed;
-    storage.nodeChanged(this);
+    nodeChanged();
+
     Preconditions.checkState(count > 0);
     Preconditions.checkState(keys[count - 1] != null);
-
     Preconditions.checkState(size() == initialSize, "%s!=%s", initialSize, size());
   }
 }

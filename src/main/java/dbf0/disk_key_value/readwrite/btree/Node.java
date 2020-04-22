@@ -1,6 +1,5 @@
 package dbf0.disk_key_value.readwrite.btree;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -20,13 +19,8 @@ public abstract class Node<K extends Comparable<K>, V> {
   final long id;
   private long parentId;
 
-  protected Node(int capacity, @NotNull BTreeStorage<K, V> storage) {
-    this(0, (K[]) new Comparable[capacity], storage);
-  }
-
-  @VisibleForTesting protected Node(int count, @NotNull K[] keys, @NotNull BTreeStorage<K, V> storage) {
-    this(storage.allocateNode(), BTreeStorage.NO_ID, count, keys, storage);
-    storage.storeNode(this);
+  protected Node(long id, int capacity, @NotNull BTreeStorage<K, V> storage) {
+    this(id, BTreeStorage.NO_ID, 0, (K[]) new Comparable[capacity], storage);
   }
 
   protected Node(long id, long parentId, int count, @NotNull K[] keys, @NotNull BTreeStorage<K, V> storage) {
@@ -95,12 +89,24 @@ public abstract class Node<K extends Comparable<K>, V> {
     return parentId;
   }
 
-  protected void clearParent() {
-    this.parentId = BTreeStorage.NO_ID;
+  protected void setParent(long parentId) {
+    if (parentId != this.parentId) {
+      this.parentId = parentId;
+      nodeChanged();
+    }
   }
 
   protected void setParent(ParentNode<K, V> parent) {
-    this.parentId = parent.id;
+    setParent(parent.id);
+  }
+
+  protected void clearParent() {
+    this.parentId = BTreeStorage.NO_ID;
+    // don't store node since this generally happens as part of delete
+  }
+
+  protected void nodeChanged() {
+    storage.nodeChanged(this);
   }
 
   protected Optional<ParentNode<K, V>> optionalParent() {
@@ -117,13 +123,13 @@ public abstract class Node<K extends Comparable<K>, V> {
     Preconditions.checkState(isFull());
     var parentOptional = optionalParent();
     var useCurrentParent = parentOptional.map(x -> !x.isFull()).orElse(false);
-    var splitParent = useCurrentParent ? parentOptional.get() : new ParentNode<K, V>(getCapacity(), storage);
+    var splitParent = useCurrentParent ? parentOptional.get() : storage.createParent();
     parentOptional.ifPresent(parent -> parent.removeNode(this));
     int mid = count / 2;
     var split = keyToAdd.compareTo(keys[mid]) < 0 ? performSplit(0, mid) : performSplit(mid, count);
+    nodeChanged();
     splitParent.addNode(split);
     splitParent.addNode(this);
-    storage.nodeChanged(this);
     return splitParent;
   }
 

@@ -2,10 +2,10 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.squareup.burst.BurstJUnit4;
 import com.squareup.burst.annotation.Burst;
-import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
 import dbf0.test.*;
-import org.junit.Test;
 import org.junit.runner.RunWith;
+
+import java.io.IOException;
 
 @RunWith(BurstJUnit4.class)
 public class MemoryBTreeTest extends BaseBTreeTest {
@@ -14,22 +14,16 @@ public class MemoryBTreeTest extends BaseBTreeTest {
 
   @Burst Capacity capacity;
 
-  public void testManualBurst() {
+  public void testManualBurst() throws IOException {
     capacity = Capacity.C2;
     testPutDeleteGet(RandomSeed.CAFE, Count.N50, KeySetSize.S10, PutDeleteGet.DELETE_HEAVY, KnownKeyRate.LOW);
   }
 
-  @Test public void testPutDeleteGet(RandomSeed seed, Count count, KeySetSize keySetSize,
-                                     PutDeleteGet putDeleteGet, KnownKeyRate knownKeyRate) {
-    var btree = bTree();
-    ReadWriteStorageTester.builderForIntegers(btree, seed, keySetSize)
-        .setDebug(DEBUG)
-        .setIterationCallback((ignored) -> validateIdsInUse(btree))
-        .build()
-        .testPutDeleteGet(count.count, putDeleteGet, knownKeyRate);
+  @Override protected boolean isDebug() {
+    return DEBUG;
   }
 
   @Override protected MemoryBTree<Integer, Integer> bTree() {
-    return new MemoryBTree<>(capacity.capacity, new MemoryBTeeStorage<Integer, Integer>());
+    return new MemoryBTree<>(new BTreeConfig(capacity.capacity));
   }
 }

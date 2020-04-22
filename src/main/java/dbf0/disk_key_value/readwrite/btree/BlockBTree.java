@@ -9,67 +9,76 @@ import java.io.IOException;
 import java.util.stream.Stream;
 
 public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
-  private final int capacity;
   private final BlockBTreeStorage<K, V> storage;
-  private Node<K, V> root;
+  private long rootId = BTreeStorage.NO_ID;
 
-  public BlockBTree(int capacity, BlockBTreeStorage<K, V> storage) {
-    this.capacity = capacity;
+  public BlockBTree(BlockBTreeStorage<K, V> storage) {
     this.storage = storage;
   }
 
   void initialize() throws IOException {
-    Preconditions.checkState(root == null, "already initialized");
-    root = new LeafNode<>(capacity, storage);
+    Preconditions.checkState(rootId == BTreeStorage.NO_ID, "already initialized");
+    var root = storage.createLeaf();
     storage.writeChanges();
+    rootId = root.id;
+  }
+
+  private Node<K, V> getRoot() {
+    Preconditions.checkState(rootId != BTreeStorage.NO_ID, "not initialized");
+    return storage.getNode(rootId);
   }
 
   @Override public int size() {
-    Preconditions.checkState(root != null, "not initialized");
-    return root.size();
+    return getRoot().size();
   }
 
   @Override public void put(@NotNull K key, @NotNull V value) throws IOException {
-    Preconditions.checkState(root != null, "not initialized");
+    storage.startCachingNodes();
     try {
-      root = root.put(key, value);
+      rootId = getRoot().put(key, value).getId();
     } catch (BlockBTreeStorage.IOExceptionWrapper e) {
       throw new IOException(e);
+    } finally {
+      storage.stopCachingNodes();
     }
     storage.writeChanges();
   }
 
   @Override @Nullable public V get(@NotNull K key) throws IOException {
-    Preconditions.checkState(root != null, "not initialized");
     try {
-      return root.get(key);
+      return getRoot().get(key);
     } catch (BlockBTreeStorage.IOExceptionWrapper e) {
       throw new IOException(e);
     }
   }
 
   @Override public boolean delete(@NotNull K key) throws IOException {
-    Preconditions.checkState(root != null, "not initialized");
     boolean deleted;
+    Node<K, V> root;
+    storage.startCachingNodes();
     try {
+      root = getRoot();
       deleted = root.delete(key);
     } catch (BlockBTreeStorage.IOExceptionWrapper e) {
       throw new IOException(e);
-    }
-    if (deleted && root.getCount() == 0) {
-      root = new LeafNode<>(root.getCapacity(), root.storage);
+    } finally {
+      storage.stopCachingNodes();
     }
     if (deleted) {
+      if (root.getCount() == 0) {
+        root = storage.createLeaf();
+        rootId = root.id;
+      }
       storage.writeChanges();
     }
     return deleted;
   }
 
   @Override @VisibleForTesting public Stream<Long> streamIdsInUse() {
-    return BTree.streamIdsInUseHelper(root);
+    return BTree.streamIdsInUseHelper(getRoot());
   }
 
   @Override @VisibleForTesting public BlockBTreeStorage<K, V> getStorage() {
-    return (BlockBTreeStorage<K, V>) root.storage;
+    return storage;
   }
 }

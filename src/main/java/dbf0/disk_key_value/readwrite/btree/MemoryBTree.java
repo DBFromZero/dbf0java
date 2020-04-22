@@ -7,14 +7,16 @@ import javax.annotation.Nullable;
 import java.util.stream.Stream;
 
 public class MemoryBTree<K extends Comparable<K>, V> implements BTree<K, V> {
+  private final MemoryBTeeStorage<K, V> storage;
   private Node<K, V> root;
 
-  public MemoryBTree(int capacity) {
-    this(capacity, new MemoryBTeeStorage<>());
+  public MemoryBTree(BTreeConfig config) {
+    this(new MemoryBTeeStorage<>(config));
   }
 
-  @VisibleForTesting MemoryBTree(int capacity, MemoryBTeeStorage<K, V> storage) {
-    root = new LeafNode<>(capacity, storage);
+  @VisibleForTesting MemoryBTree(MemoryBTeeStorage<K, V> storage) {
+    this.storage = storage;
+    root = storage.createLeaf();
   }
 
   @Override public int size() {
@@ -32,7 +34,7 @@ public class MemoryBTree<K extends Comparable<K>, V> implements BTree<K, V> {
   @Override public boolean delete(@NotNull K key) {
     var deleted = root.delete(key);
     if (deleted && root.getCount() == 0) {
-      root = new LeafNode<>(root.getCapacity(), root.storage);
+      root = storage.createLeaf();
     }
     return deleted;
   }

@@ -10,7 +10,7 @@ import java.util.Map;
 public class MemoryBlockStorage implements BlockStorage {
 
   private final Map<Long, ByteArrayWrapper> blocks = new HashMap<>();
-  private int nextBlockId;
+  private int nextBlockId = 1000;
 
   private class MemoryBlockWriter implements BlockStorage.BlockWriter {
 

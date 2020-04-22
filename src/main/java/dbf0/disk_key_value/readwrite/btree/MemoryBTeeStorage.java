@@ -8,16 +8,19 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-public class MemoryBTeeStorage<K extends Comparable<K>, V> implements BTreeStorage<K, V> {
+public class MemoryBTeeStorage<K extends Comparable<K>, V> extends BaseBTreeStorage<K, V> {
 
-  private long nextId = 0;
   private final Map<Long, Node<K, V>> nodes = new HashMap<>();
 
-  @Override public long allocateNode() {
-    return nextId++;
+  public MemoryBTeeStorage(BTreeConfig config, long nextId) {
+    super(config, nextId);
   }
 
-  @Override public void storeNode(@NotNull Node<K, V> node) {
+  public MemoryBTeeStorage(BTreeConfig config) {
+    super(config);
+  }
+
+  @Override protected void nodeCreated(Node<K, V> node) {
     Preconditions.checkArgument(node.id >= 0);
     nodes.put(node.id, node);
   }

@@ -18,27 +18,28 @@ public class NodeSerialization<K extends Comparable<K>, V> {
       LeafNode.class, LEAF
   );
 
-  private final int capacity;
+  private final BTreeConfig config;
   private final SerializationPair<K> keySerializationPair;
   private final SerializationPair<V> valueSerializationPair;
 
-  public NodeSerialization(int capacity,
+  public NodeSerialization(BTreeConfig config,
                            SerializationPair<K> keySerializationPair,
                            SerializationPair<V> valueSerializationPair) {
-    this.capacity = capacity;
+    this.config = config;
     this.keySerializationPair = keySerializationPair;
     this.valueSerializationPair = valueSerializationPair;
   }
 
   void serialize(SerializationHelper helper, Node<K, V> node) throws IOException {
-    Preconditions.checkState(node.getCapacity() == capacity);
+    var type = NODE_CLASS_TO_BYTE.get(node.getClass());
+    Preconditions.checkArgument(type != null, "bad node type %s", node);
+    helper.writeByte(type);
     helper.writeLong(node.getId());
     helper.writeLong(node.getParentId());
     helper.writeInt(node.getCount());
     for (K key : node.getKeys()) {
       keySerializationPair.getSerializer().serialize(helper, key);
     }
-    helper.writeByte(NODE_CLASS_TO_BYTE.get(node.getClass()));
     if (node instanceof LeafNode) {
       for (V value : ((LeafNode<K, V>) node).getValues()) {
         valueSerializationPair.getSerializer().serialize(helper, value);
@@ -51,6 +52,9 @@ public class NodeSerialization<K extends Comparable<K>, V> {
   }
 
   Node<K, V> deserialize(DeserializationHelper helper, BTreeStorage<K, V> storage) throws IOException {
+    var type = helper.readByte();
+    Integer capacity = Map.of(LEAF, config.getLeafCapacity(), PARENT, config.getParentCapacity()).get(type);
+    Preconditions.checkState(capacity != null, "bad node type %s", type);
     var nodeId = helper.readLong();
     var parentId = helper.readLong();
     int count = helper.readInt();
@@ -58,7 +62,6 @@ public class NodeSerialization<K extends Comparable<K>, V> {
     for (int i = 0; i < count; i++) {
       keys[i] = keySerializationPair.getDeserializer().desserialize(helper);
     }
-    var type = helper.readByte();
     switch (type) {
       case LEAF:
         var values = (V[]) new Object[capacity];

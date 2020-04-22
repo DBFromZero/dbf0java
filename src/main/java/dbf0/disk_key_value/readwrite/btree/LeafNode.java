@@ -12,14 +12,9 @@ import java.util.stream.Stream;
 public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
   private final V[] values;
 
-  LeafNode(int capacity, @NotNull BTreeStorage<K, V> storage) {
-    super(capacity, storage);
+  LeafNode(long id, int capacity, @NotNull BTreeStorage<K, V> storage) {
+    super(id, capacity, storage);
     this.values = (V[]) new Object[capacity];
-  }
-
-  LeafNode(int capacity, ParentNode<K, V> parent) {
-    this(capacity, parent.storage);
-    this.setParent(parent);
   }
 
   LeafNode(long id, long parentId, int count, @NotNull K[] keys, V[] values, @NotNull BTreeStorage<K, V> storage) {
@@ -66,7 +61,7 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
         count++;
       }
     }
-    storage.nodeChanged(this);
+    nodeChanged();
     return this;
   }
 
@@ -89,7 +84,7 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
     if (count == 0) {
       storage.deleteNode(id);
     } else {
-      storage.nodeChanged(this);
+      nodeChanged();
     }
     optionalParent().ifPresent(parent -> {
       if (count == 0) {
@@ -102,7 +97,7 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   @Override protected LeafNode<K, V> performSplit(int start, int end) {
-    var newLeaf = new LeafNode<K, V>(getCapacity(), storage);
+    var newLeaf = storage.createLeaf();
     splitHelper(start, end, newLeaf, values, newLeaf.values);
     return newLeaf;
   }
@@ -147,6 +142,6 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
       combined.count += src.count;
       src.storage.deleteNode(src.id);
     });
-    combined.storage.nodeChanged(combined);
+    combined.nodeChanged();
   }
 }

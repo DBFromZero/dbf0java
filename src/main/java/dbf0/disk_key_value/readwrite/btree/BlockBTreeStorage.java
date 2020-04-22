@@ -9,61 +9,94 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.util.*;
 
-public class BlockBTreeStorage<K extends Comparable<K>, V> implements BTreeStorage<K, V> {
+public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStorage<K, V> {
 
   private final MetadataStorage metadataStorage;
   private final BlockStorage blockStorage;
   private final NodeSerialization<K, V> serialization;
 
-  private long nextId = 0;
   private final Map<Long, Long> nodeIdsToBlockIds = new HashMap<>();
 
   private final Map<Long, Node<K, V>> nodesToWrite = new HashMap<>();
   private final Set<Long> blocksToFree = new HashSet<>();
 
-  public BlockBTreeStorage(MetadataStorage metadataStorage,
+  // during modifying operations we need to cache nodes in memory so that
+  // getNode(id) always returns the same instance
+  private boolean cacheNodes = false;
+  private final Map<Long, Node<K, V>> getCache = new HashMap<>();
+
+  public BlockBTreeStorage(BTreeConfig config,
+                           long nextId,
+                           MetadataStorage metadataStorage,
                            BlockStorage blockStorage,
                            NodeSerialization<K, V> serialization) {
+    super(config, nextId);
     this.metadataStorage = metadataStorage;
     this.blockStorage = blockStorage;
     this.serialization = serialization;
   }
 
-  @Override public long allocateNode() {
-    return nextId++;
+  public BlockBTreeStorage(BTreeConfig config,
+                           MetadataStorage metadataStorage,
+                           BlockStorage blockStorage,
+                           NodeSerialization<K, V> serialization) {
+    super(config);
+    this.metadataStorage = metadataStorage;
+    this.blockStorage = blockStorage;
+    this.serialization = serialization;
   }
 
-  @Override public void storeNode(@NotNull Node<K, V> node) {
-    System.out.println("store " + node);
+  @Override protected void nodeCreated(Node<K, V> node) {
     nodesToWrite.put(node.getId(), node);
   }
 
+  void startCachingNodes() {
+    Preconditions.checkState(!cacheNodes);
+    cacheNodes = true;
+  }
+
+  void stopCachingNodes() {
+    Preconditions.checkState(cacheNodes);
+    cacheNodes = false;
+    getCache.clear();
+  }
+
   @Override public @NotNull Node<K, V> getNode(long id) {
-    System.out.println("store get " + id);
     var node = nodesToWrite.get(id);
     if (node != null) {
       return node;
     }
+    if (cacheNodes) {
+      node = getCache.get(id);
+      if (node != null) {
+        return node;
+      }
+    }
     try {
-      return loadNode(id);
+      node = loadNode(id);
     } catch (IOException e) {
       throw new IOExceptionWrapper(e);
     }
+    if (cacheNodes) {
+      getCache.put(id, node);
+    }
+    return node;
   }
 
   @Override public void deleteNode(long id) {
-    System.out.println("store delete " + id);
-    if (id == 0) {
-      System.out.println("debug");
-    }
     var blockId = nodeIdsToBlockIds.remove(id);
     Preconditions.checkState(blockId != null, "no such node id %s", id);
     blocksToFree.add(blockId);
     nodesToWrite.remove(id);
+    if (cacheNodes) {
+      getCache.remove(id);
+    }
   }
 
   @Override public void nodeChanged(@NotNull Node<K, V> node) {
-    storeNode(node);
+    Preconditions.checkState(nodesToWrite.containsKey(node.getId()) || nodeIdsToBlockIds.containsKey(node.getId()),
+        "no such node %s", node);
+    nodesToWrite.put(node.getId(), node);
   }
 
   @Override public Set<Long> getIdsInUse() {
@@ -71,7 +104,7 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> implements BTreeStora
   }
 
   void writeChanges() throws IOException {
-    System.out.println("write changes");
+    Preconditions.checkState(!cacheNodes);
     if (!nodesToWrite.isEmpty()) {
       for (var entry : nodesToWrite.entrySet()) {
         var node = entry.getValue();
@@ -79,7 +112,10 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> implements BTreeStora
         var writer = blockStorage.writeBlock();
         serialization.serialize(writer.serializer(), node);
         writer.commit();
-        nodeIdsToBlockIds.put(node.getId(), writer.getBlockId());
+        var oldBlockId = nodeIdsToBlockIds.put(node.getId(), writer.getBlockId());
+        if (oldBlockId != null) {
+          blocksToFree.add(oldBlockId);
+        }
       }
       nodesToWrite.clear();
       metadataStorage.updateMetadata(this::updateMetadata);

@@ -160,7 +160,7 @@ public class ReadWriteStorageTester<K, V> {
     });
   }
 
-  public void doDelete(@Nullable Map<K, V> map, boolean known, K key) {
+  private void doDelete(@Nullable Map<K, V> map, boolean known, K key) {
     print("del " + key);
     var a = assertThat(adapter.delete(key)).describedAs("key=%s", key);
     if (known) {
@@ -173,7 +173,7 @@ public class ReadWriteStorageTester<K, V> {
     }
   }
 
-  public void doGet(Map<K, V> map, boolean known, K key) {
+  private void doGet(Map<K, V> map, boolean known, K key) {
     print("get " + key);
     var a = assertThat(adapter.get(key)).describedAs("key=%s", key);
     if (known) {
@@ -183,7 +183,7 @@ public class ReadWriteStorageTester<K, V> {
     }
   }
 
-  public void doPut(Map<K, V> map, K key) {
+  private void doPut(Map<K, V> map, K key) {
     var value = valueSupplier.get();
     print(() -> "put " + key + "=" + value);
     map.put(key, value);
@@ -196,14 +196,14 @@ public class ReadWriteStorageTester<K, V> {
     }
   }
 
-  @NotNull private String join(Object... args) {
-    return Joiner.on(" ").join(args);
-  }
-
   private void print(Supplier<Object> supplier) {
     if (debug) {
       System.out.println(supplier.get());
     }
+  }
+
+  @NotNull private String join(Object... args) {
+    return Joiner.on(" ").join(args);
   }
 
   private static class Adapter<K, V> {

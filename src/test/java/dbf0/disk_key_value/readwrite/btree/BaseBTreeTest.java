@@ -2,9 +2,7 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Joiner;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
-import dbf0.test.Count;
-import dbf0.test.KeySetSize;
-import dbf0.test.RandomSeed;
+import dbf0.test.*;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -71,8 +69,7 @@ abstract class BaseBTreeTest {
     validateIdsInUse(btree);
   }
 
-  //@Test
-  public void testAddDeleteMany(RandomSeed seed, Count count, KeySetSize keySetSize) throws IOException {
+  @Test public void testAddDeleteMany(RandomSeed seed, Count count, KeySetSize keySetSize) throws IOException {
     var btree = bTree();
 
     ReadWriteStorageTester.builderForIntegers(btree, seed, keySetSize)
@@ -84,6 +81,16 @@ abstract class BaseBTreeTest {
     assertThat(idsList).hasSize(1);
     assertThat(btree.getStorage().getIdsInUse()).hasSize(1);
     assertThat(idsList).hasSameElementsAs(btree.getStorage().getIdsInUse());
+  }
+
+  @Test public void testPutDeleteGet(RandomSeed seed, Count count, KeySetSize keySetSize,
+                                     PutDeleteGet putDeleteGet, KnownKeyRate knownKeyRate) throws IOException {
+    var btree = bTree();
+    ReadWriteStorageTester.builderForIntegers(btree, seed, keySetSize)
+        .setDebug(isDebug())
+        .setIterationCallback((ignored) -> validateIdsInUse(btree))
+        .build()
+        .testPutDeleteGet(count.count, putDeleteGet, knownKeyRate);
   }
 
   protected void validateIdsInUse(BTree<Integer, Integer> btree) {

@@ -9,9 +9,9 @@ public interface BTreeStorage<K extends Comparable<K>, V> {
 
   long NO_ID = -1L;
 
-  long allocateNode();
+  LeafNode<K, V> createLeaf();
 
-  void storeNode(@NotNull Node<K, V> node);
+  ParentNode<K, V> createParent();
 
   @NotNull Node<K, V> getNode(long id);
 
