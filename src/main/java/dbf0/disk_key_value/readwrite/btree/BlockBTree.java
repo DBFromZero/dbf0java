@@ -1,7 +1,6 @@
 package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Streams;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
@@ -21,7 +20,7 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
     return root.size();
   }
 
-  @Override public void put(@NotNull K key, V value) throws IOException {
+  @Override public void put(@NotNull K key, @NotNull V value) throws IOException {
     try {
       root = root.put(key, value);
     } catch (BlockBTreeStorage.IOExceptionWrapper e) {
@@ -55,16 +54,10 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
   }
 
   @Override @VisibleForTesting public Stream<Long> streamIdsInUse() {
-    return Streams.concat(
-        Stream.of(root.id),
-        Stream.of(root)
-            .filter(ParentNode.class::isInstance)
-            .map(ParentNode.class::cast)
-            .flatMap(ParentNode::streamIdsInUse)
-    );
+    return BTree.streamIdsInUseHelper(root);
   }
 
-  @Override @VisibleForTesting public BTreeStorage<K, V> getStorage() {
-    return root.storage;
+  @Override @VisibleForTesting public BlockBTreeStorage<K, V> getStorage() {
+    return (BlockBTreeStorage<K, V>) root.storage;
   }
 }
