@@ -4,6 +4,7 @@ import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.PrefixIo;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -17,6 +18,14 @@ public class DeserializationHelper {
 
   public DeserializationHelper(InputStream inputStream) {
     this.inputStream = inputStream;
+  }
+
+  public DeserializationHelper(byte[] bytes) {
+    this(new ByteArrayInputStream(bytes));
+  }
+
+  public DeserializationHelper(ByteArrayWrapper bw) {
+    this(bw.getArray());
   }
 
   public long readLong() throws IOException {

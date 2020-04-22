@@ -2,12 +2,10 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import dbf0.common.ByteArrayWrapper;
-import dbf0.disk_key_value.readwrite.blocks.ByteSerializationHelper;
 import dbf0.disk_key_value.readwrite.blocks.DeserializationHelper;
+import dbf0.disk_key_value.readwrite.blocks.SerializationHelper;
 import dbf0.disk_key_value.readwrite.blocks.SerializationPair;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Map;
 
@@ -32,9 +30,8 @@ public class NodeSerialization<K extends Comparable<K>, V> {
     this.valueSerializationPair = valueSerializationPair;
   }
 
-  ByteArrayWrapper serialize(Node<K, V> node) throws IOException {
+  void serialize(SerializationHelper helper, Node<K, V> node) throws IOException {
     Preconditions.checkState(node.getCapacity() == capacity);
-    var helper = new ByteSerializationHelper();
     helper.writeLong(node.getId());
     helper.writeLong(node.getParentId());
     helper.writeInt(node.getCount());
@@ -51,11 +48,9 @@ public class NodeSerialization<K extends Comparable<K>, V> {
         helper.writeLong(childId);
       }
     }
-    return helper.getBytes();
   }
 
-  Node<K, V> deserialize(ByteArrayWrapper bw, BTreeStorage<K, V> storage) throws IOException {
-    var helper = new DeserializationHelper(new ByteArrayInputStream(bw.getArray()));
+  Node<K, V> deserialize(DeserializationHelper helper, BTreeStorage<K, V> storage) throws IOException {
     var nodeId = helper.readLong();
     var parentId = helper.readLong();
     int count = helper.readInt();

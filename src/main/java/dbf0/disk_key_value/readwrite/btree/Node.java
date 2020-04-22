@@ -123,6 +123,7 @@ public abstract class Node<K extends Comparable<K>, V> {
     var split = keyToAdd.compareTo(keys[mid]) < 0 ? performSplit(0, mid) : performSplit(mid, count);
     splitParent.addNode(split);
     splitParent.addNode(this);
+    storage.nodeChanged(this);
     return splitParent;
   }
 

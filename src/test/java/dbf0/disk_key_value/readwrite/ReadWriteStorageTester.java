@@ -76,9 +76,9 @@ public class ReadWriteStorageTester<K, V> {
     return new Builder<>(new Adapter<>(storage));
   }
 
-  public static Builder<Integer, Integer> builderForInteger(ReadWriteStorage<Integer, Integer> storage,
-                                                            Random random,
-                                                            int keySize) {
+  public static Builder<Integer, Integer> builderForIntegers(ReadWriteStorage<Integer, Integer> storage,
+                                                             Random random,
+                                                             int keySize) {
     return builder(storage)
         .setKnownKeySupplier(() -> random.nextInt(keySize))
         .setUnknownKeySupplier(() -> keySize + random.nextInt(keySize))
@@ -86,10 +86,10 @@ public class ReadWriteStorageTester<K, V> {
         .setRandom(random);
   }
 
-  public static Builder<Integer, Integer> builderForInteger(ReadWriteStorage<Integer, Integer> storage,
-                                                            RandomSeed seed,
-                                                            KeySetSize keySetSize) {
-    return builderForInteger(storage, seed.random(), keySetSize.size);
+  public static Builder<Integer, Integer> builderForIntegers(ReadWriteStorage<Integer, Integer> storage,
+                                                             RandomSeed seed,
+                                                             KeySetSize keySetSize) {
+    return builderForIntegers(storage, seed.random(), keySetSize.size);
   }
 
   private final Adapter<K, V> adapter;
@@ -115,10 +115,7 @@ public class ReadWriteStorageTester<K, V> {
   public void testAddDeleteMany(int count) {
     Map<K, V> map = new HashMap<>(count);
     IntStream.range(0, count).forEach(ignored -> {
-      var key = knownKeySupplier.get();
-      var value = valueSupplier.get();
-      map.put(key, value);
-      adapter.put(key, value);
+      doPut(map, knownKeySupplier.get());
       assertThat(adapter.size()).isEqualTo(map.size());
       iterationCallback.accept(adapter.storage);
     });
@@ -131,7 +128,7 @@ public class ReadWriteStorageTester<K, V> {
     Stream.generate(unknownKeySupplier).limit(count)
         .forEach(key -> assertThat(adapter.delete(key)).isFalse());
 
-    map.keySet().forEach(key -> assertThat(adapter.delete(key)).describedAs("key=%s", key).isTrue());
+    map.keySet().forEach(key -> doDelete(null, true, key));
 
     assertThat(adapter.size()).isEqualTo(0);
   }
@@ -145,7 +142,9 @@ public class ReadWriteStorageTester<K, V> {
       var known = (!map.isEmpty()) && random.nextDouble() < knownKeyRate.rate;
       var r = random.nextDouble();
       if (r < putDeleteGet.putRate) {
-        doPut(map, existingKeySupplier, known);
+        var key = known ? existingKeySupplier.get() : knownKeySupplier.get();
+        Preconditions.checkState(!known || map.containsKey(key));
+        doPut(map, key);
       } else {
         var key = known ? existingKeySupplier.get() : unknownKeySupplier.get();
         Preconditions.checkState(known == map.containsKey(key));
@@ -161,11 +160,13 @@ public class ReadWriteStorageTester<K, V> {
     });
   }
 
-  public void doDelete(Map<K, V> map, boolean known, K key) {
+  public void doDelete(@Nullable Map<K, V> map, boolean known, K key) {
     print("del " + key);
     var a = assertThat(adapter.delete(key)).describedAs("key=%s", key);
     if (known) {
-      map.remove(key);
+      if (map != null) {
+        map.remove(key);
+      }
       a.isTrue();
     } else {
       a.isFalse();
@@ -182,11 +183,9 @@ public class ReadWriteStorageTester<K, V> {
     }
   }
 
-  public void doPut(Map<K, V> map, Supplier<K> existingKeySupplier, boolean known) {
+  public void doPut(Map<K, V> map, K key) {
     var value = valueSupplier.get();
-    var key = known ? existingKeySupplier.get() : knownKeySupplier.get();
-    print("put " + key);
-    Preconditions.checkState(!known || map.containsKey(key));
+    print(() -> "put " + key + "=" + value);
     map.put(key, value);
     adapter.put(key, value);
   }

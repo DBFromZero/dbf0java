@@ -5,6 +5,7 @@ import com.google.common.collect.Iterators;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.IoFunction;
+import dbf0.common.PositionTrackingStream;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.IOException;

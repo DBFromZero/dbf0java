@@ -17,4 +17,8 @@ public class SerializationPair<T> {
   public Deserializer<T> getDeserializer() {
     return deserializer;
   }
+
+  public static SerializationPair<Integer> intSerializationPair() {
+    return new SerializationPair<>(Serializer.intSerializer(), Deserializer.intDeserializer());
+  }
 }

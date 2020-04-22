@@ -6,8 +6,8 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Stream;
 
 public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
   private final V[] values;
@@ -48,25 +48,25 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
       keys[0] = key;
       values[0] = value;
       count++;
-      return this;
+    } else {
+      var index = binarySearch(key);
+      if (index >= 0) {
+        values[index] = value;
+      } else if (isFull()) {
+        return split(key).put(key, value);
+      } else {
+        index = invertNegativeBinarySearchIndex(index);
+        var n = count - index;
+        if (n > 0) {
+          arrayShiftUp(keys, index, n);
+          arrayShiftUp(values, index, n);
+        }
+        keys[index] = key;
+        values[index] = value;
+        count++;
+      }
     }
-    var index = binarySearch(key);
-    if (index >= 0) {
-      values[index] = value;
-      return this;
-    }
-    if (isFull()) {
-      return split(key).put(key, value);
-    }
-    int insertIndex = invertNegativeBinarySearchIndex(index);
-    var n = count - insertIndex;
-    if (n > 0) {
-      arrayShiftUp(keys, insertIndex, n);
-      arrayShiftUp(values, insertIndex, n);
-    }
-    keys[insertIndex] = key;
-    values[insertIndex] = value;
-    count++;
+    storage.nodeChanged(this);
     return this;
   }
 
@@ -88,6 +88,8 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
     count--;
     if (count == 0) {
       storage.deleteNode(id);
+    } else {
+      storage.nodeChanged(this);
     }
     optionalParent().ifPresent(parent -> {
       if (count == 0) {
@@ -125,7 +127,8 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
 
   @Override public String toString() {
     return baseToStringHelper()
-        .add("values", "[" + Joiner.on(",").join(Arrays.stream(values).limit(count).iterator()) + "]")
+        .add("values", values == null ? "<null>" :
+            "[" + Joiner.on(",").join(Arrays.stream(values).limit(count).iterator()) + "]")
         .toString();
   }
 
@@ -137,12 +140,13 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
    * Destructively modifies the first leaf node.
    * Assumes nodes are ordered by key.
    */
-  static <K extends Comparable<K>, V> void combine(LeafNode<K, V> combined, Iterator<LeafNode<K, V>> iterator) {
-    while (iterator.hasNext()) {
-      var src = iterator.next();
+  static <K extends Comparable<K>, V> void combine(LeafNode<K, V> combined, Stream<LeafNode<K, V>> stream) {
+    stream.forEach(src -> {
       System.arraycopy(src.values, 0, combined.values, combined.count, src.count);
       System.arraycopy(src.keys, 0, combined.keys, combined.count, src.count);
       combined.count += src.count;
-    }
+      src.storage.deleteNode(src.id);
+    });
+    combined.storage.nodeChanged(combined);
   }
 }
