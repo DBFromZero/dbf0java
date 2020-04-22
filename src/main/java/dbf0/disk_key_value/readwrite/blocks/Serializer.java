@@ -1,5 +1,7 @@
 package dbf0.disk_key_value.readwrite.blocks;
 
+import dbf0.common.ByteArrayWrapper;
+
 import java.io.IOException;
 
 public interface Serializer<T> {
@@ -7,5 +9,13 @@ public interface Serializer<T> {
 
   static Serializer<Integer> intSerializer() {
     return SerializationHelper::writeInt;
+  }
+
+  static Serializer<Long> longSerializer() {
+    return SerializationHelper::writeLong;
+  }
+
+  static Serializer<ByteArrayWrapper> bytesSerializer() {
+    return SerializationHelper::writeBytes;
   }
 }

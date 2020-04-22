@@ -1,5 +1,7 @@
 package dbf0.common;
 
+import com.google.common.collect.ImmutableList;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,6 +18,8 @@ public class Dbf0Util {
   public static Logger getLogger(Class<?> c) {
     return Logger.getLogger(c.getName());
   }
+
+  public static ImmutableList<String> SIZE_SUFFIXES = ImmutableList.of("K", "M", "G", "T", "P", "X");
 
   public static void enableConsoleLogging(Level level) {
     var rootLogger = LogManager.getLogManager().getLogger("");
@@ -61,5 +65,20 @@ public class Dbf0Util {
     } else if (!d.mkdirs()) {
       throw new RuntimeException("Failed to create directory");
     }
+  }
+
+  public static String formatSize(long size) {
+    double scaled = size;
+    var iter = SIZE_SUFFIXES.iterator();
+    String suffix = "";
+    while (scaled >= 100.0 && iter.hasNext()) {
+      scaled /= 1000.0;
+      suffix = iter.next();
+    }
+    return String.format("%.2f%s", scaled, suffix);
+  }
+
+  public static String formatBytes(long bytes) {
+    return formatSize(bytes) + "B";
   }
 }

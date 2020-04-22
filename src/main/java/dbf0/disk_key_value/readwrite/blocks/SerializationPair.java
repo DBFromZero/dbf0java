@@ -1,5 +1,7 @@
 package dbf0.disk_key_value.readwrite.blocks;
 
+import dbf0.common.ByteArrayWrapper;
+
 public class SerializationPair<T> {
 
   private final Serializer<T> serializer;
@@ -20,5 +22,9 @@ public class SerializationPair<T> {
 
   public static SerializationPair<Integer> intSerializationPair() {
     return new SerializationPair<>(Serializer.intSerializer(), Deserializer.intDeserializer());
+  }
+
+  public static SerializationPair<ByteArrayWrapper> bytesSerializationPair() {
+    return new SerializationPair<>(Serializer.bytesSerializer(), Deserializer.bytesDeserializer());
   }
 }

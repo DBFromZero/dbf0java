@@ -6,6 +6,7 @@ import dbf0.common.PrefixIo;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 public class SerializationHelper {
 
@@ -16,6 +17,8 @@ public class SerializationHelper {
   public SerializationHelper(OutputStream outputStream) {
     this.outputStream = outputStream;
   }
+
+  //TODO: More space efficient way of writing numbers
 
   public void writeLong(long l) throws IOException {
     outputStream.write(ByteBuffer.allocate(LONG_BYTES).putLong(l).array());
@@ -31,5 +34,13 @@ public class SerializationHelper {
 
   public void writeBytes(ByteArrayWrapper w) throws IOException {
     PrefixIo.writeBytes(outputStream, w);
+  }
+
+  public <K, V> void writeMap(Map<K, V> map, Serializer<K> keySerializer, Serializer<V> valueSerializer) throws IOException {
+    writeInt(map.size());
+    for (var entry : map.entrySet()) {
+      keySerializer.serialize(this, entry.getKey());
+      valueSerializer.serialize(this, entry.getValue());
+    }
   }
 }

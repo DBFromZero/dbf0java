@@ -3,6 +3,7 @@ package dbf0.disk_key_value.readwrite;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import dbf0.common.ByteArrayWrapper;
 import dbf0.test.KeySetSize;
 import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
@@ -32,6 +33,7 @@ public class ReadWriteStorageTester<K, V> {
     private Consumer<ReadWriteStorage<K, V>> iterationCallback;
     private Random random;
     private boolean debug = false;
+    private boolean checkSize = true;
 
     private Builder(Adapter<K, V> adapter) {
       this.adapter = adapter;
@@ -67,6 +69,11 @@ public class ReadWriteStorageTester<K, V> {
       return this;
     }
 
+    public Builder<K, V> setCheckSize(boolean checkSize) {
+      this.checkSize = checkSize;
+      return this;
+    }
+
     public ReadWriteStorageTester<K, V> build() {
       return new ReadWriteStorageTester<>(this);
     }
@@ -92,6 +99,18 @@ public class ReadWriteStorageTester<K, V> {
     return builderForIntegers(storage, seed.random(), keySetSize.size);
   }
 
+  public static Builder<ByteArrayWrapper, ByteArrayWrapper> builderForBytes(
+      ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage,
+      Random random,
+      int keySize,
+      int valueSize) {
+    return builder(storage)
+        .setKnownKeySupplier(() -> ByteArrayWrapper.random(random, keySize))
+        .setUnknownKeySupplier(() -> ByteArrayWrapper.random(random, keySize + 1))
+        .setValueSupplier(() -> ByteArrayWrapper.random(random, valueSize))
+        .setRandom(random);
+  }
+
   private final Adapter<K, V> adapter;
   private final Supplier<K> knownKeySupplier;
   private final Supplier<K> unknownKeySupplier;
@@ -99,6 +118,7 @@ public class ReadWriteStorageTester<K, V> {
   private final Consumer<ReadWriteStorage<K, V>> iterationCallback;
   private final Random random;
   private final boolean debug;
+  private final boolean checkSize;
 
   private ReadWriteStorageTester(Builder<K, V> builder) {
     this.adapter = builder.adapter;
@@ -109,6 +129,7 @@ public class ReadWriteStorageTester<K, V> {
     });
     this.random = Optional.ofNullable(builder.random).orElseGet(Random::new);
     this.debug = builder.debug;
+    this.checkSize = builder.checkSize;
   }
 
 
@@ -116,7 +137,9 @@ public class ReadWriteStorageTester<K, V> {
     Map<K, V> map = new HashMap<>(count);
     IntStream.range(0, count).forEach(ignored -> {
       doPut(map, knownKeySupplier.get());
-      assertThat(adapter.size()).isEqualTo(map.size());
+      if (checkSize) {
+        assertThat(adapter.size()).isEqualTo(map.size());
+      }
       iterationCallback.accept(adapter.storage);
     });
 
@@ -155,7 +178,9 @@ public class ReadWriteStorageTester<K, V> {
           doDelete(map, known, key);
         }
       }
-      assertThat(adapter.size()).isEqualTo(map.size());
+      if (checkSize) {
+        assertThat(adapter.size()).isEqualTo(map.size());
+      }
       iterationCallback.accept(adapter.storage);
     });
   }

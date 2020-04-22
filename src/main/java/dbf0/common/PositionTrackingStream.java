@@ -21,6 +21,10 @@ public class PositionTrackingStream extends BufferedOutputStream {
     this(new FileOutputStream(path), 0x8000);
   }
 
+  public PositionTrackingStream(File path) throws FileNotFoundException {
+    this(new FileOutputStream(path), 0x8000);
+  }
+
   public long getPosition() {
     return position;
   }

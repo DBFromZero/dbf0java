@@ -60,13 +60,13 @@ public class NodeSerialization<K extends Comparable<K>, V> {
     int count = helper.readInt();
     K[] keys = (K[]) new Comparable[capacity];
     for (int i = 0; i < count; i++) {
-      keys[i] = keySerializationPair.getDeserializer().desserialize(helper);
+      keys[i] = keySerializationPair.getDeserializer().deserialize(helper);
     }
     switch (type) {
       case LEAF:
         var values = (V[]) new Object[capacity];
         for (int i = 0; i < count; i++) {
-          values[i] = valueSerializationPair.getDeserializer().desserialize(helper);
+          values[i] = valueSerializationPair.getDeserializer().deserialize(helper);
         }
         return new LeafNode<>(nodeId, parentId, count, keys, values, storage);
       case PARENT:

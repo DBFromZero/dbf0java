@@ -12,27 +12,10 @@ public class MemoryBlockStorage implements BlockStorage {
   private final Map<Long, ByteArrayWrapper> blocks = new HashMap<>();
   private int nextBlockId = 1000;
 
-  private class MemoryBlockWriter implements BlockStorage.BlockWriter {
-
-    private final long blockId;
-    private final ByteSerializationHelper serializer = new ByteSerializationHelper();
-    private boolean isCommitted = false;
+  private class MemoryBlockWriter extends BaseBlockWriter<ByteSerializationHelper> {
 
     public MemoryBlockWriter(long blockId) {
-      this.blockId = blockId;
-    }
-
-    @Override public long getBlockId() {
-      return blockId;
-    }
-
-    @Override public SerializationHelper serializer() {
-      Preconditions.checkState(!isCommitted);
-      return serializer;
-    }
-
-    @Override public boolean isCommitted() {
-      return isCommitted;
+      super(blockId, new ByteSerializationHelper());
     }
 
     @Override public void commit() {
@@ -57,20 +40,11 @@ public class MemoryBlockStorage implements BlockStorage {
     Preconditions.checkArgument(block != null, "No such block id %s", blockId);
   }
 
-  @Override public int usedBlockCount() {
-    return blocks.size();
-  }
-
-  @Override public long totalUsedBytes() {
-    return blocks.values().stream().mapToInt(ByteArrayWrapper::length).sum();
-  }
-
-  @Override public int unusedBlockCount() {
-    return 0;
-  }
-
-  @Override public long totalUnusedBytes() {
-    return 0;
+  @Override public BlockStats getStats() {
+    return new BlockStats(
+        new BlockCounts(blocks.size(), blocks.values().stream().mapToLong(ByteArrayWrapper::length).sum()),
+        new BlockCounts(0, 0)
+    );
   }
 
   @Override public <T> void vacuum(BlockReWriter<T> blockReWriter) {

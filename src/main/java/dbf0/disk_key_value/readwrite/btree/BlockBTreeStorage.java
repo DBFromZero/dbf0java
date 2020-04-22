@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import dbf0.disk_key_value.readwrite.blocks.BlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.MetadataStorage;
 import dbf0.disk_key_value.readwrite.blocks.SerializationHelper;
+import dbf0.disk_key_value.readwrite.blocks.Serializer;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -105,6 +106,8 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
 
   void writeChanges() throws IOException {
     Preconditions.checkState(!cacheNodes);
+
+    blockStorage.startBatchWrites();
     if (!nodesToWrite.isEmpty()) {
       for (var entry : nodesToWrite.entrySet()) {
         var node = entry.getValue();
@@ -125,6 +128,7 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
       blockStorage.freeBlock(blockId);
     }
     blocksToFree.clear();
+    blockStorage.endBatchWrites();
   }
 
   void load() throws IOException {
@@ -146,11 +150,7 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
   }
 
   private void updateMetadata(SerializationHelper helper) throws IOException {
-    helper.writeInt(nodeIdsToBlockIds.size());
-    for (var entry : nodeIdsToBlockIds.entrySet()) {
-      helper.writeLong(entry.getKey());
-      helper.writeLong(entry.getValue());
-    }
+    helper.writeMap(nodeIdsToBlockIds, Serializer.longSerializer(), Serializer.longSerializer());
   }
 
   static class IOExceptionWrapper extends RuntimeException {
