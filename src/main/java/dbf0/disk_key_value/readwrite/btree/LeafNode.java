@@ -7,11 +7,12 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 
 public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
-  protected final V[] values;
+  private final V[] values;
 
-  public LeafNode(int capacity, @NotNull BTreeStorage<K, V> storage) {
+  LeafNode(int capacity, @NotNull BTreeStorage<K, V> storage) {
     super(capacity, storage);
     this.values = (V[]) new Object[capacity];
   }
@@ -19,6 +20,12 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
   LeafNode(int capacity, ParentNode<K, V> parent) {
     this(capacity, parent.storage);
     this.setParent(parent);
+  }
+
+  LeafNode(long id, long parentId, int count, @NotNull K[] keys, V[] values, @NotNull BTreeStorage<K, V> storage) {
+    super(id, parentId, count, keys, storage);
+    Preconditions.checkArgument(keys.length == values.length);
+    this.values = values;
   }
 
   @Override public int size() {
@@ -116,6 +123,16 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
     }
   }
 
+  @Override public String toString() {
+    return baseToStringHelper()
+        .add("values", "[" + Joiner.on(",").join(Arrays.stream(values).limit(count).iterator()) + "]")
+        .toString();
+  }
+
+  List<V> getValues() {
+    return Arrays.asList(values).subList(0, count);
+  }
+
   /**
    * Destructively modifies the first leaf node.
    * Assumes nodes are ordered by key.
@@ -127,11 +144,5 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
       System.arraycopy(src.keys, 0, combined.keys, combined.count, src.count);
       combined.count += src.count;
     }
-  }
-
-  @Override public String toString() {
-    return baseToStringHelper()
-        .add("values", "[" + Joiner.on(",").join(Arrays.stream(values).limit(count).iterator()) + "]")
-        .toString();
   }
 }

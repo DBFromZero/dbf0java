@@ -3,7 +3,7 @@ package dbf0.disk_key_value.readwrite.blocks;
 import java.io.IOException;
 
 public interface MetadataStorage {
-  DeserializationHelper loadMetadata() throws IOException;
+  DeserializationHelper readMetadata() throws IOException;
 
   void updateMetadata(MetadataUpdater updater) throws IOException;
 

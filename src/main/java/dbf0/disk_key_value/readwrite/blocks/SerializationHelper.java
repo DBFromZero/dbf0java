@@ -25,6 +25,10 @@ public class SerializationHelper {
     outputStream.write(ByteBuffer.allocate(INT_BYTES).putInt(i).array());
   }
 
+  public void writeByte(byte b) throws IOException {
+    outputStream.write(b);
+  }
+
   public void writeBytes(ByteArrayWrapper w) throws IOException {
     PrefixIo.writeBytes(outputStream, w);
   }

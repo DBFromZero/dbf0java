@@ -8,31 +8,39 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Stream;
 
 class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   // use boxed array so that it can be passed to generic Object[] methods
-  private final Long[] children;
+  private final Long[] childIds;
 
   ParentNode(int capacity, @NotNull BTreeStorage<K, V> storage) {
     super(capacity, storage);
-    this.children = new Long[capacity];
+    this.childIds = new Long[capacity];
   }
 
-  @VisibleForTesting ParentNode(int count, @NotNull K[] keys, @NotNull Long[] children,
+  @VisibleForTesting ParentNode(int count, @NotNull K[] keys, @NotNull Long[] childIds,
                                 @NotNull BTreeStorage<K, V> storage) {
     super(count, keys, storage);
-    Preconditions.checkState(keys.length == children.length);
-    this.children = children;
+    Preconditions.checkState(keys.length == childIds.length);
+    this.childIds = childIds;
+  }
+
+  ParentNode(long id, long parentId, int count, @NotNull K[] keys, @NotNull Long[] childIds,
+             @NotNull BTreeStorage<K, V> storage) {
+    super(id, parentId, count, keys, storage);
+    Preconditions.checkState(keys.length == childIds.length);
+    this.childIds = childIds;
   }
 
   private Stream<Node<K, V>> streamChildren() {
-    return Arrays.stream(children).limit(count).map(storage::getNode);
+    return Arrays.stream(childIds).limit(count).map(storage::getNode);
   }
 
   private Node<K, V> getChild(int index) {
     Preconditions.checkArgument(index < count);
-    return storage.getNode(children[index]);
+    return storage.getNode(childIds[index]);
   }
 
   @Override public int size() {
@@ -64,7 +72,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   @Override public String toString() {
     return baseToStringHelper()
         .add("children",
-            "[" + Joiner.on(",").join(Arrays.stream(children).limit(count)
+            "[" + Joiner.on(",").join(Arrays.stream(childIds).limit(count)
                 .map(x -> x == null ? "null" : x)
                 .iterator()) + "]")
         .toString();
@@ -107,7 +115,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
 
     var child = getChild(index);
     Preconditions.checkState(child != this);
-    Preconditions.checkState(child.parentId == this.id);
+    Preconditions.checkState(child.getParentId() == this.id);
 
     // if key is in the range of this child, then we have to give it to that child
     if (child.minKey().compareTo(key) <= 0 && child.maxKey().compareTo(key) >= 0) {
@@ -119,7 +127,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
         // if on this second call we're full, then we split and created a new node above us
         // hence it is possible for the result of child.put(k, v) to return a node that
         // is actually our new parent
-        if (this.parentId == result.id) {
+        if (this.getParentId() == result.id) {
           return result;
         }
         addNode(result);
@@ -160,21 +168,21 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     var newParent = new ParentNode<>(getCapacity(), storage);
     for (int i = start; i < end; i++) {
       var child = getChild(i);
-      Preconditions.checkState(child.parentId == this.id);
+      Preconditions.checkState(child.getParentId() == this.id);
       child.setParent(newParent);
     }
-    splitHelper(start, end, newParent, children, newParent.children);
+    splitHelper(start, end, newParent, childIds, newParent.childIds);
     return newParent;
   }
 
   void addNode(Node<K, V> node) {
-    Preconditions.checkState(node.parentId == BTreeStorage.NO_ID || node.parentId == this.id);
-    Preconditions.checkState(node.id != parentId, "%s cannot contain its parent", this);
+    Preconditions.checkState(node.getParentId() == BTreeStorage.NO_ID || node.getParentId() == this.id);
+    Preconditions.checkState(node.id != getParentId(), "%s cannot contain its parent", this);
     node.setParent(this);
     var maxKey = node.maxKey();
     if (count == 0) {
       keys[0] = maxKey;
-      children[0] = node.id;
+      childIds[0] = node.id;
       count++;
       return;
     }
@@ -222,7 +230,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
 
   Stream<Long> streamIdsInUse() {
     return Streams.concat(
-        Arrays.stream(children).limit(count),
+        Arrays.stream(childIds).limit(count),
         streamChildren()
             .filter(ParentNode.class::isInstance)
             .map(ParentNode.class::cast)
@@ -230,26 +238,30 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     );
   }
 
+  List<Long> getChildIds() {
+    return Arrays.asList(childIds).subList(0, count);
+  }
+
   private int removeChildInternal(Node<K, V> child, K oldMaxKey) {
     int index = getChildIndex(child, oldMaxKey);
-    child.parentId = BTreeStorage.NO_ID;
+    child.clearParent();
     int n = this.count - index - 1;
     if (n > 0) {
       arrayShiftDown(keys, index, n);
-      arrayShiftDown(children, index, n);
+      arrayShiftDown(childIds, index, n);
     } else {
       keys[index] = null;
-      children[index] = null;
+      childIds[index] = null;
     }
     this.count--;
     return index;
   }
 
   private int getChildIndex(Node<K, V> child, K key) {
-    Preconditions.checkState(child.parentId == this.id);
+    Preconditions.checkState(child.getParentId() == this.id);
     var index = binarySearch(key);
     Preconditions.checkState(index >= 0, "no key %s in %s", key, this);
-    Preconditions.checkState(children[index] == child.id);
+    Preconditions.checkState(childIds[index] == child.id);
     return index;
   }
 
@@ -266,7 +278,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       result = putFull(key, value, child);
     } else {
       var newChild = new LeafNode<K, V>(getCapacity(), this).put(key, value);
-      children[count] = newChild.id;
+      childIds[count] = newChild.id;
       keys[count] = key;
       count++;
       result = this;
@@ -291,14 +303,14 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   private void insertNode(Node<K, V> node, int index) {
-    Preconditions.checkState(node.parentId == this.id);
+    Preconditions.checkState(node.getParentId() == this.id);
     var n = count - index;
     if (n > 0) {
       arrayShiftUp(keys, index, n);
-      arrayShiftUp(children, index, n);
+      arrayShiftUp(childIds, index, n);
     }
     keys[index] = node.maxKey();
-    children[index] = node.id;
+    childIds[index] = node.id;
     count++;
   }
 
@@ -347,13 +359,13 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
 
     var combined = (LeafNode<K, V>) getChild(start);
     LeafNode.combine(combined,
-        Arrays.stream(children, start + 1, start + n)
+        Arrays.stream(childIds, start + 1, start + n)
             .map(storage::getNode)
             .map(x -> (LeafNode<K, V>) x)
             .iterator());
     keys[start] = combined.maxKey();
 
-    Arrays.stream(children, start + 1, start + n).forEach(storage::deleteNode);
+    Arrays.stream(childIds, start + 1, start + n).forEach(storage::deleteNode);
 
     int removed = n - 1;
     int endShift = count - removed;
@@ -361,13 +373,13 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       int j = i + removed;
       Preconditions.checkState(j < count);
       Preconditions.checkState(keys[j] != null);
-      Preconditions.checkState(children[j] != null);
+      Preconditions.checkState(childIds[j] != null);
       keys[i] = keys[j];
-      children[i] = children[j];
+      childIds[i] = childIds[j];
     }
     for (int i = count - removed; i < count; i++) {
       keys[i] = null;
-      children[i] = null;
+      childIds[i] = null;
     }
     count -= removed;
     Preconditions.checkState(count > 0);

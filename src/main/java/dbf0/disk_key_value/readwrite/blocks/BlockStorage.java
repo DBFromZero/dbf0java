@@ -1,5 +1,7 @@
 package dbf0.disk_key_value.readwrite.blocks;
 
+import dbf0.common.ByteArrayWrapper;
+
 import java.io.IOException;
 import java.util.Map;
 
@@ -7,9 +9,9 @@ public interface BlockStorage {
 
   long NO_SUCH_BLOCK = -1;
 
-  long writeBlock(byte[] bytes) throws IOException;
+  long writeBlock(ByteArrayWrapper bytes) throws IOException;
 
-  byte[] readBlock(long blockId) throws IOException;
+  ByteArrayWrapper readBlock(long blockId) throws IOException;
 
   void freeBlock(long blockId) throws IOException;
 

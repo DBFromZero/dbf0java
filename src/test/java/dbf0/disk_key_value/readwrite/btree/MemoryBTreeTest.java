@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(BurstJUnit4.class)
-public class BTreeTest {
+public class MemoryBTreeTest {
 
   private static final boolean DEBUG = false;
 
@@ -161,8 +161,8 @@ public class BTreeTest {
     });
   }
 
-  private BTree<Integer, Integer> bTree() {
-    return new BTree<>(capacity.capacity, new MemoryBTeeStorage<Integer, Integer>());
+  private MemoryBTree<Integer, Integer> bTree() {
+    return new MemoryBTree<>(capacity.capacity, new MemoryBTeeStorage<Integer, Integer>());
   }
 
   private void print(Object... args) {

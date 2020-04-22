@@ -1,50 +1,21 @@
 package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Streams;
-import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import java.io.IOException;
 import java.util.stream.Stream;
 
-public class BTree<K extends Comparable<K>, V> {
-  private Node<K, V> root;
+public interface BTree<K extends Comparable<K>, V> {
+  int size() throws IOException;
 
-  public BTree(int capacity, BTreeStorage<K, V> storage) {
-    root = new LeafNode<>(capacity, storage);
-  }
+  void put(K key, V value) throws IOException;
 
-  int size() {
-    return root.size();
-  }
+  @Nullable V get(K key) throws IOException;
 
-  void put(@NotNull K key, V value) {
-    root = root.put(key, value);
-  }
+  boolean delete(K key) throws IOException;
 
-  @Nullable V get(@NotNull K key) {
-    return root.get(key);
-  }
+  @VisibleForTesting Stream<Long> streamIdsInUse();
 
-  boolean delete(@NotNull K key) {
-    var deleted = root.delete(key);
-    if (deleted && root.getCount() == 0) {
-      root = new LeafNode<>(root.getCapacity(), root.storage);
-    }
-    return deleted;
-  }
-
-  @VisibleForTesting Stream<Long> streamIdsInUse() {
-    return Streams.concat(
-        Stream.of(root.id),
-        Stream.of(root)
-            .filter(ParentNode.class::isInstance)
-            .map(ParentNode.class::cast)
-            .flatMap(ParentNode::streamIdsInUse)
-    );
-  }
-
-  @VisibleForTesting BTreeStorage<K, V> getStorage() {
-    return root.storage;
-  }
+  @VisibleForTesting BTreeStorage<K, V> getStorage();
 }

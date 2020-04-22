@@ -3,7 +3,7 @@ package dbf0.disk_key_value.readwrite.btree;
 import com.google.common.base.Preconditions;
 import dbf0.disk_key_value.readwrite.blocks.BlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.MetadataStorage;
-import dbf0.disk_key_value.readwrite.blocks.SerializationPair;
+import dbf0.disk_key_value.readwrite.blocks.SerializationHelper;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -16,20 +16,20 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> implements BTreeStora
 
   private final MetadataStorage metadataStorage;
   private final BlockStorage blockStorage;
+  private final NodeSerialization<K, V> serialization;
 
   private long nextId = 0;
   private final Map<Long, Long> nodeIdsToBlockIds = new HashMap<>();
+
   private final Map<Long, Node<K, V>> nodesToWrite = new HashMap<>();
-  private final Set<Long> blocksToDelete = new HashSet<>();
+  private final Set<Long> blocksToFree = new HashSet<>();
 
   public BlockBTreeStorage(MetadataStorage metadataStorage,
                            BlockStorage blockStorage,
-                           SerializationPair<K> keySerializationPair,
-                           SerializationPair<V> valueSerializationPair) {
+                           NodeSerialization<K, V> serialization) {
     this.metadataStorage = metadataStorage;
     this.blockStorage = blockStorage;
-    this.keySerializationPair = keySerializationPair;
-    this.valueSerializationPair = valueSerializationPair;
+    this.serialization = serialization;
   }
 
   @Override public long allocateNode() {
@@ -37,7 +37,7 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> implements BTreeStora
   }
 
   @Override public void storeNode(@NotNull Node<K, V> node) {
-    nodesToWrite.put(node.id, node);
+    nodesToWrite.put(node.getId(), node);
   }
 
   @Override public @NotNull Node<K, V> getNode(long id) {
@@ -48,14 +48,15 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> implements BTreeStora
     try {
       return loadNode(id);
     } catch (IOException e) {
-      throw new RuntimeException(e);
+      throw new IOExceptionWrapper(e);
     }
   }
 
   @Override public void deleteNode(long id) {
     var blockId = nodeIdsToBlockIds.remove(id);
     Preconditions.checkState(blockId != null, "no such node id %s", id);
-    blocksToDelete.add(blockId);
+    blocksToFree.add(blockId);
+    nodesToWrite.remove(id);
   }
 
   @Override public void nodeChanged(@NotNull Node<K, V> node) {
@@ -67,18 +68,53 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> implements BTreeStora
   }
 
   void writeChanges() throws IOException {
-    if (nodesToWrite.isEmpty() && blocksToDelete.isEmpty()) {
-      return;
+    if (!nodesToWrite.isEmpty()) {
+      for (var entry : nodesToWrite.entrySet()) {
+        var node = entry.getValue();
+        Preconditions.checkState(entry.getKey() == node.getId());
+        var block = serialization.serialize(node);
+        var blockId = blockStorage.writeBlock(block);
+        nodeIdsToBlockIds.put(node.getId(), blockId);
+      }
+      nodesToWrite.clear();
+      metadataStorage.updateMetadata(this::updateMetadata);
     }
+
+    for (var blockId : blocksToFree) {
+      blockStorage.freeBlock(blockId);
+    }
+    blocksToFree.clear();
   }
 
   void load() throws IOException {
-
+    nodeIdsToBlockIds.clear();
+    var helper = metadataStorage.readMetadata();
+    var count = helper.readInt();
+    for (int i = 0; i < count; i++) {
+      var nodeId = helper.readLong();
+      var blockId = helper.readLong();
+      nodeIdsToBlockIds.put(nodeId, blockId);
+    }
   }
 
   private Node<K, V> loadNode(long nodeId) throws IOException {
     var blockId = nodeIdsToBlockIds.get(nodeId);
-    Preconditions.checkState(blockId != null, "no such node id %s", id);
+    Preconditions.checkState(blockId != null, "no such node id %s", nodeId);
+    var block = blockStorage.readBlock(blockId);
+    return serialization.deserialize(block, this);
   }
 
+  private void updateMetadata(SerializationHelper helper) throws IOException {
+    helper.writeInt(nodeIdsToBlockIds.size());
+    for (var entry : nodeIdsToBlockIds.entrySet()) {
+      helper.writeLong(entry.getKey());
+      helper.writeLong(entry.getValue());
+    }
+  }
+
+  static class IOExceptionWrapper extends RuntimeException {
+    public IOExceptionWrapper(IOException cause) {
+      super(cause);
+    }
+  }
 }

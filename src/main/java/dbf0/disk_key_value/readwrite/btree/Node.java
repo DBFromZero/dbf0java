@@ -8,33 +8,36 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 public abstract class Node<K extends Comparable<K>, V> {
 
   protected final K[] keys;
-  protected int count = 0;
+  protected int count;
   @NotNull protected final BTreeStorage<K, V> storage;
   final long id;
-  protected long parentId = BTreeStorage.NO_ID;
+  private long parentId;
 
   protected Node(int capacity, @NotNull BTreeStorage<K, V> storage) {
-    Preconditions.checkArgument(capacity > 0 && capacity % 2 == 0);
-    this.keys = (K[]) new Comparable[capacity];
-    this.storage = storage;
-    this.id = storage.allocateNode();
-    // TODO: Find a more efficient way to determine when to store nodes
-    storage.storeNode(id, this);
+    this(0, (K[]) new Comparable[capacity], storage);
   }
 
-  @VisibleForTesting protected Node(int count, K @NotNull [] keys, @NotNull BTreeStorage<K, V> storage) {
+  @VisibleForTesting protected Node(int count, @NotNull K[] keys, @NotNull BTreeStorage<K, V> storage) {
+    this(storage.allocateNode(), BTreeStorage.NO_ID, count, keys, storage);
+    storage.storeNode(this);
+  }
+
+  protected Node(long id, long parentId, int count, @NotNull K[] keys, @NotNull BTreeStorage<K, V> storage) {
+    Preconditions.checkArgument(keys.length > 0 && keys.length % 2 == 0);
     Preconditions.checkArgument(count >= 0);
     Preconditions.checkArgument(count <= keys.length);
-    this.keys = keys;
+    this.id = id;
+    this.parentId = parentId;
     this.count = count;
+    this.keys = keys;
     this.storage = storage;
-    this.id = storage.allocateNode();
   }
 
   int getCount() {
@@ -77,20 +80,32 @@ public abstract class Node<K extends Comparable<K>, V> {
                 .map(x -> x == null ? "null" : x)
                 .collect(Collectors.toList())) + "]")
         .add("count", count)
-        .add("parentId", parentId);
+        .add("parentId", getParentId());
   }
 
-  protected boolean hasParent() {
-    return parentId != BTreeStorage.NO_ID;
+  List<K> getKeys() {
+    return Arrays.asList(keys).subList(0, count);
   }
 
-  @VisibleForTesting void setParent(ParentNode<K, V> parent) {
+  long getId() {
+    return id;
+  }
+
+  long getParentId() {
+    return parentId;
+  }
+
+  protected void clearParent() {
+    this.parentId = BTreeStorage.NO_ID;
+  }
+
+  protected void setParent(ParentNode<K, V> parent) {
     this.parentId = parent.id;
   }
 
   protected Optional<ParentNode<K, V>> optionalParent() {
-    return parentId == BTreeStorage.NO_ID ? Optional.empty() :
-        Optional.of((ParentNode<K, V>) storage.getNode(parentId));
+    return getParentId() == BTreeStorage.NO_ID ? Optional.empty() :
+        Optional.of((ParentNode<K, V>) storage.getNode(getParentId()));
   }
 
   protected int binarySearch(K key) {
