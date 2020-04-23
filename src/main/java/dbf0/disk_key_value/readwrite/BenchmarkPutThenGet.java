@@ -8,37 +8,35 @@ import dbf0.common.Dbf0Util;
 import dbf0.common.IoRunnable;
 import dbf0.disk_key_value.readwrite.blocks.*;
 import dbf0.disk_key_value.readwrite.btree.*;
-import dbf0.test.PutDeleteGet;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.File;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class Benchmark {
+public class BenchmarkPutThenGet {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(dbf0.disk_key_value.readonly.Benchmark.class);
 
   public static void main(String[] args) throws Exception {
-    Preconditions.checkArgument(args.length == 11);
+    Preconditions.checkArgument(args.length == 10);
     Dbf0Util.enableConsoleLogging(Level.INFO);
 
     var argsItr = Arrays.asList(args).iterator();
     var file = new File(argsItr.next());
     var leafCapacity = Integer.parseInt(argsItr.next());
     var parentCapacity = Integer.parseInt(argsItr.next());
-    var vacuumThreshold = Double.parseDouble(argsItr.next());
-    var minVacuumSize = Integer.parseInt(argsItr.next());
     var keyLength = Integer.parseInt(argsItr.next());
     var valueLength = Integer.parseInt(argsItr.next());
-    var putDeleteGet = PutDeleteGet.valueOf(argsItr.next());
+    var keysToWrite = Integer.parseInt(argsItr.next());
+    var keySaveFrac = Double.parseDouble(argsItr.next());
     var knownKeyRate = Double.parseDouble(argsItr.next());
     var threadCount = Integer.parseInt(argsItr.next());
     var duration = Duration.parse(argsItr.next());
@@ -61,55 +59,51 @@ public class Benchmark {
             config,
             SerializationPair.bytesSerializationPair(),
             SerializationPair.bytesSerializationPair()));
-    var btree = new LockingBlockBTree<>(new BlockBTree<>(bTreeStorage), bTreeStorage, () -> {
-      var stats = blockStorage.getStats();
-      return stats.unusedBytesFraction() > vacuumThreshold & stats.getUnused().getBytes() > minVacuumSize;
-    });
+    var baseBtree = new BlockBTree<>(bTreeStorage);
+    var btree = new LockingBlockBTree<>(baseBtree, bTreeStorage, () -> false);
 
     blockStorage.initialize();
     btree.initialize();
 
-    var countPut = new AtomicInteger(0);
-    var countDelete = new AtomicInteger(0);
-    var countDeleteFound = new AtomicInteger(0);
+    LOGGER.info("writing keys");
+    var random = new Random();
+    var knownKeys = new ArrayList<ByteArrayWrapper>((int) (keySaveFrac * keysToWrite));
+    metadataStore.pauseSync();
+    baseBtree.batchPut(IntStream.range(0, keysToWrite).mapToObj(index -> {
+      if (index % 10000 == 0) {
+        LOGGER.info("writing " + index);
+      }
+      var key = ByteArrayWrapper.random(random, keyLength);
+      if (random.nextDouble() < keySaveFrac) {
+        knownKeys.add(key);
+      }
+      return Pair.of(key, ByteArrayWrapper.random(random, valueLength));
+    }));
+    metadataStore.resumeSync();
+
+    LOGGER.info("vacuuming");
+    metadataStore.pauseSync();
+    var vacuum = bTreeStorage.vacuum();
+    vacuum.writeNewFile();
+    vacuum.commit();
+    metadataStore.resumeSync();
+
+    LOGGER.info("starting get");
+
     var countGet = new AtomicInteger(0);
     var countFound = new AtomicInteger(0);
     var errors = new AtomicInteger(0);
 
     var threads = IntStream.range(0, threadCount).mapToObj(i -> new Thread(IoRunnable.wrap(() -> {
       try {
-        var random = new Random();
-        var keyTracker = new KeyTracker();
-        Supplier<ByteArrayWrapper> getDelKeyGenerate = () -> {
-          var known = (!keyTracker.isEmpty()) && random.nextDouble() < knownKeyRate;
-          return known ? keyTracker.select(random) : ByteArrayWrapper.random(random, keyLength);
-        };
+        var threadRandom = new Random();
         while (!Thread.interrupted()) {
-
-          var operation = putDeleteGet.select(random);
-          switch (operation) {
-            case PUT:
-              var key = ByteArrayWrapper.random(random, keyLength);
-              btree.put(key, ByteArrayWrapper.random(random, valueLength));
-              keyTracker.add(key);
-              countPut.incrementAndGet();
-              break;
-            case GET:
-              var value = btree.get(getDelKeyGenerate.get());
-              countGet.incrementAndGet();
-              if (value != null) {
-                countFound.incrementAndGet();
-              }
-              break;
-            case DELETE:
-              var deleted = btree.delete(getDelKeyGenerate.get());
-              countDelete.incrementAndGet();
-              if (deleted) {
-                countDeleteFound.incrementAndGet();
-              }
-              break;
-            default:
-              throw new RuntimeException("Unsupported operation " + operation);
+          var known = threadRandom.nextDouble() < knownKeyRate;
+          var key = known ? knownKeys.get(threadRandom.nextInt(knownKeys.size())) : ByteArrayWrapper.random(threadRandom, keyLength);
+          var value = btree.get(key);
+          countGet.incrementAndGet();
+          if (value != null) {
+            countFound.incrementAndGet();
           }
         }
       } catch (Exception e) {
@@ -126,6 +120,7 @@ public class Benchmark {
         if (errors.get() == 0) {
           Thread.sleep(sleepInterval);
         }
+        LOGGER.info("stats: " + makeStatsString(countGet, countFound));
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
@@ -140,40 +135,21 @@ public class Benchmark {
       System.exit(1);
     }
 
+    System.out.println(makeStatsString(countGet, countFound));
+  }
+
+  public static String makeStatsString(AtomicInteger countGet, AtomicInteger countFound) {
     var stats = ImmutableMap.builder()
-        .put("put", countPut.get())
-        .put("delete", countDelete.get())
-        .put("deleteFound", countDeleteFound.get())
         .put("get", countGet.get())
         .put("getFound", countFound.get())
         .build();
-    System.out.println(new Gson().toJson(stats));
+    return new Gson().toJson(stats);
   }
 
   public static void deleteFile(File file) {
     if (file.exists()) {
       var deleted = file.delete();
       Preconditions.checkState(deleted);
-    }
-  }
-
-  private static class KeyTracker {
-    private final LinkedList<ByteArrayWrapper> keys = new LinkedList<>();
-    private final int maxKeys = 100;
-
-    private boolean isEmpty() {
-      return keys.isEmpty();
-    }
-
-    private void add(ByteArrayWrapper key) {
-      keys.add(key);
-      if (keys.size() == maxKeys) {
-        keys.removeFirst();
-      }
-    }
-
-    private ByteArrayWrapper select(Random r) {
-      return keys.stream().skip(r.nextInt(keys.size())).findFirst().get();
     }
   }
 }

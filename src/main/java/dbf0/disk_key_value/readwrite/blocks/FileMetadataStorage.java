@@ -16,6 +16,7 @@ public class FileMetadataStorage<T extends OutputStream> implements Closeable {
 
   private transient T outputStream;
   private transient SerializationHelper serializationHelper;
+  private boolean pauseSync = false;
 
   public FileMetadataStorage(FileOperations<T> fileOperations) {
     this.fileOperations = fileOperations;
@@ -45,6 +46,15 @@ public class FileMetadataStorage<T extends OutputStream> implements Closeable {
 
   public static <T2 extends OutputStream> FileMetadataStorage<T2> load(FileOperations<T2> fileOperations) throws IOException {
     throw new RuntimeException("not implemented");
+  }
+
+  public void pauseSync() {
+    pauseSync = true;
+  }
+
+  public void resumeSync() throws IOException {
+    pauseSync = false;
+    syncIo();
   }
 
   private class FileMetadataMapWriter<K, V> implements MetadataMap<K, V> {
@@ -117,8 +127,10 @@ public class FileMetadataStorage<T extends OutputStream> implements Closeable {
       serializationHelper.writeString(name);
       serializationHelper.writeByte(operation);
     }
+  }
 
-    private void syncIo() throws IOException {
+  private void syncIo() throws IOException {
+    if (!pauseSync) {
       fileOperations.sync(outputStream);
     }
   }

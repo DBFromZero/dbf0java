@@ -2,6 +2,7 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
@@ -72,6 +73,22 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
       storage.writeChanges();
     }
     return deleted;
+  }
+
+  public void batchPut(Stream<Pair<K, V>> stream) throws IOException {
+    storage.startCachingNodes();
+    try {
+      var iterator = stream.iterator();
+      while (iterator.hasNext()) {
+        var entry = iterator.next();
+        rootId = getRoot().put(entry.getKey(), entry.getValue()).getId();
+      }
+    } catch (BlockBTreeStorage.IOExceptionWrapper e) {
+      throw new IOException(e);
+    } finally {
+      storage.stopCachingNodes();
+    }
+    storage.writeChanges();
   }
 
   @Override @VisibleForTesting public Stream<Long> streamIdsInUse() {
