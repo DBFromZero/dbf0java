@@ -48,8 +48,10 @@ public class TmpFileBlockStorageTest {
           var stats = blockStorage.getStats();
           System.out.println(count + " " + stats);
           if (stats.unusedBytesFraction() > 0.8) {
+            var vacuum = bTreeStorage.vacuum();
             try {
-              bTreeStorage.vacuum();
+              vacuum.writeNewFile();
+              vacuum.commit();
             } catch (IOException e) {
               throw new RuntimeException(e);
             }

@@ -4,6 +4,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import dbf0.common.ByteArrayWrapper;
+import dbf0.common.Dbf0Util;
 import dbf0.test.KeySetSize;
 import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
@@ -16,8 +17,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -25,12 +26,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class ReadWriteStorageTester<K, V> {
 
+  private static final Logger LOGGER = Dbf0Util.getLogger(ReadWriteStorageTester.class);
+
+  public interface Callback<T> {
+    void accept(T t) throws IOException;
+  }
+
   public static class Builder<K, V> {
     private final Adapter<K, V> adapter;
     private Supplier<K> knownKeySupplier;
     private Supplier<K> unknownKeySupplier;
     private Supplier<V> valueSupplier;
-    private Consumer<ReadWriteStorage<K, V>> iterationCallback;
+    private Callback<ReadWriteStorage<K, V>> iterationCallback;
     private Random random;
     private boolean debug = false;
     private boolean checkSize = true;
@@ -54,7 +61,7 @@ public class ReadWriteStorageTester<K, V> {
       return this;
     }
 
-    public Builder<K, V> setIterationCallback(Consumer<ReadWriteStorage<K, V>> iterationCallback) {
+    public Builder<K, V> setIterationCallback(Callback<ReadWriteStorage<K, V>> iterationCallback) {
       this.iterationCallback = iterationCallback;
       return this;
     }
@@ -115,7 +122,7 @@ public class ReadWriteStorageTester<K, V> {
   private final Supplier<K> knownKeySupplier;
   private final Supplier<K> unknownKeySupplier;
   private final Supplier<V> valueSupplier;
-  private final Consumer<ReadWriteStorage<K, V>> iterationCallback;
+  private final Callback<ReadWriteStorage<K, V>> iterationCallback;
   private final Random random;
   private final boolean debug;
   private final boolean checkSize;
@@ -140,7 +147,7 @@ public class ReadWriteStorageTester<K, V> {
       if (checkSize) {
         assertThat(adapter.size()).isEqualTo(map.size());
       }
-      iterationCallback.accept(adapter.storage);
+      runCallback(iterationCallback, adapter.storage);
     });
 
     map.forEach((key, value) -> assertThat(adapter.get(key)).describedAs("key=%s", key).isEqualTo(value));
@@ -181,7 +188,7 @@ public class ReadWriteStorageTester<K, V> {
       if (checkSize) {
         assertThat(adapter.size()).isEqualTo(map.size());
       }
-      iterationCallback.accept(adapter.storage);
+      runCallback(iterationCallback, adapter.storage);
     });
   }
 
@@ -217,18 +224,27 @@ public class ReadWriteStorageTester<K, V> {
 
   private void print(Object... args) {
     if (debug) {
-      System.out.println(join(args));
+      LOGGER.fine(() -> join(args));
     }
   }
 
   private void print(Supplier<Object> supplier) {
     if (debug) {
-      System.out.println(supplier.get());
+      LOGGER.fine(() -> supplier.get().toString());
     }
   }
 
   @NotNull private String join(Object... args) {
     return Joiner.on(" ").join(args);
+  }
+
+  static <T> void runCallback(Callback<T> callback, T x) {
+    try {
+      callback.accept(x);
+    } catch (IOException e) {
+      throw new AssertionError(
+          Strings.lenientFormat("unexpected IOError in callback"), e);
+    }
   }
 
   private static class Adapter<K, V> {

@@ -93,7 +93,7 @@ abstract class BaseBTreeTest {
         .testPutDeleteGet(count.count, putDeleteGet, knownKeyRate);
   }
 
-  protected void validateIdsInUse(BTree<Integer, Integer> btree) {
+  protected void validateIdsInUse(BTree<Integer, Integer> btree) throws IOException {
     var idsList = btree.streamIdsInUse().collect(Collectors.toList());
     assertThat(idsList).doesNotHaveDuplicates();
     assertThat(idsList).hasSameElementsAs(btree.getStorage().getIdsInUse());

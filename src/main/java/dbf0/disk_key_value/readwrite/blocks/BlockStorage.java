@@ -2,10 +2,11 @@ package dbf0.disk_key_value.readwrite.blocks;
 
 import com.google.common.base.Preconditions;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.Map;
 
-public interface BlockStorage {
+public interface BlockStorage extends Closeable {
 
   long NO_SUCH_BLOCK = -1;
 
@@ -33,8 +34,6 @@ public interface BlockStorage {
 
   BlockStats getStats();
 
-  Map<Long, Long> vacuum() throws IOException;
-
   abstract class BaseBlockWriter<T extends SerializationHelper> implements BlockWriter {
 
     protected final long blockId;
@@ -58,5 +57,16 @@ public interface BlockStorage {
     @Override public boolean isCommitted() {
       return isCommitted;
     }
+  }
+
+  BlockStorageVacuum vacuum();
+
+  interface BlockStorageVacuum {
+
+    void writeNewFile() throws IOException;
+
+    Map<Long, Long> commit() throws IOException;
+
+    void abort();
   }
 }

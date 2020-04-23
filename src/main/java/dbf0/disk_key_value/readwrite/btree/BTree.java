@@ -4,11 +4,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Streams;
 import dbf0.disk_key_value.readwrite.ReadWriteStorage;
 
+import java.io.IOException;
 import java.util.stream.Stream;
 
 public interface BTree<K extends Comparable<K>, V> extends ReadWriteStorage<K, V> {
 
-  @VisibleForTesting Stream<Long> streamIdsInUse();
+  @VisibleForTesting Stream<Long> streamIdsInUse() throws IOException;
 
   @VisibleForTesting BTreeStorage<K, V> getStorage();
 

@@ -44,6 +44,12 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
     }
   }
 
+  @Override public void close() throws IOException {
+    Preconditions.checkState(positionTrackingStream != null, " not initialized");
+    positionTrackingStream.close();
+    positionTrackingStream = null;
+  }
+
   @Override public void startBatchWrites() throws IOException {
     Preconditions.checkState(!inBatch);
     inBatch = true;
@@ -113,28 +119,8 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
     return new BlockStats(counts(usedBlockLengths), counts(unusedBlocksLengths));
   }
 
-  @Override public Map<Long, Long> vacuum() throws IOException {
-    Preconditions.checkState(!inBatch);
-    LOGGER.info(() -> "Vacuuming. Initial stats: " + getStats());
-    var overWriter = fileOperations.createOverWriter();
-    try {
-      Map<Long, Long> mapping;
-      long finalLength;
-      try (var vacuumStream = new PositionTrackingStream(overWriter.getOutputStream())) {
-        mapping = runVacuum(vacuumStream);
-        finalLength = vacuumStream.getPosition();
-      }
-      overWriter.commit();
-      updateBlockMappings(mapping);
-      writeMetadata();
-      setupOutputStream(finalLength);
-      LOGGER.info(() -> "Vacuuming succeeded. Final stats: " + getStats());
-      return mapping;
-    } catch (IOException e) {
-      LOGGER.warning(() -> Strings.lenientFormat("Vacuuming failed due to %s. Attempting to abort", e));
-      overWriter.abort();
-      throw e;
-    }
+  @Override public FileBlockStorageVacuum vacuum() {
+    return new FileBlockStorageVacuum();
   }
 
   private void createNew() throws IOException {
@@ -166,6 +152,46 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
     positionTrackingStream.flush();
     fileOperations.sync(outputStream);
     writeMetadata();
+  }
+
+  private class FileBlockStorageVacuum implements BlockStorageVacuum {
+
+    private FileOperations.OverWriter<T> overWriter;
+    private Map<Long, Long> mapping;
+    private long finalLength;
+
+    @Override public void writeNewFile() throws IOException {
+      Preconditions.checkState(!inBatch);
+      Preconditions.checkState(overWriter == null);
+      LOGGER.info(() -> "Vacuuming. Initial stats: " + getStats());
+      overWriter = fileOperations.createOverWriter();
+      try (var vacuumStream = new PositionTrackingStream(overWriter.getOutputStream())) {
+        mapping = runVacuum(vacuumStream);
+        finalLength = vacuumStream.getPosition();
+      }
+    }
+
+    @Override public Map<Long, Long> commit() throws IOException {
+      try {
+        Preconditions.checkState(!inBatch);
+        Preconditions.checkState(overWriter != null);
+        Preconditions.checkState(mapping != null);
+        overWriter.commit();
+        updateBlockMappings(mapping);
+        writeMetadata();
+        setupOutputStream(finalLength);
+        LOGGER.info(() -> "Vacuuming succeeded. Final stats: " + getStats());
+        return mapping;
+      } catch (IOException e) {
+        LOGGER.warning(() -> Strings.lenientFormat("Vacuuming failed due to %s. Attempting to abort", e));
+        abort();
+        throw e;
+      }
+    }
+
+    @Override public void abort() {
+      overWriter.abort();
+    }
   }
 
   private Map<Long, Long> runVacuum(PositionTrackingStream vacuumStream) throws IOException {

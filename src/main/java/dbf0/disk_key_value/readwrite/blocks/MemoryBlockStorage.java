@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 
 public class MemoryBlockStorage implements BlockStorage {
 
-  private final Map<Long, ByteArrayWrapper> blocks = new HashMap<>();
+  private Map<Long, ByteArrayWrapper> blocks = new HashMap<>();
   private int nextBlockId = 1000;
 
   private class MemoryBlockWriter extends BaseBlockWriter<ByteSerializationHelper> {
@@ -49,7 +49,22 @@ public class MemoryBlockStorage implements BlockStorage {
     );
   }
 
-  @Override public Map<Long, Long> vacuum() throws IOException {
-    return blocks.keySet().stream().collect(Collectors.toMap(Function.identity(), Function.identity()));
+  @Override public void close() {
+    blocks.clear();
+    blocks = null;
+  }
+
+  @Override public BlockStorageVacuum vacuum() {
+    return new BlockStorageVacuum() {
+      @Override public void writeNewFile() {
+      }
+
+      @Override public Map<Long, Long> commit() {
+        return blocks.keySet().stream().collect(Collectors.toMap(Function.identity(), Function.identity()));
+      }
+
+      @Override public void abort() {
+      }
+    };
   }
 }

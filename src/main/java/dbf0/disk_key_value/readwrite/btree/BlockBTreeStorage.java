@@ -7,11 +7,12 @@ import dbf0.disk_key_value.readwrite.blocks.SerializationHelper;
 import dbf0.disk_key_value.readwrite.blocks.Serializer;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStorage<K, V> {
+public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStorage<K, V> implements Closeable {
 
   private final MetadataStorage metadataStorage;
   private final BlockStorage blockStorage;
@@ -46,6 +47,10 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
     this.metadataStorage = metadataStorage;
     this.blockStorage = blockStorage;
     this.serialization = serialization;
+  }
+
+  @Override public void close() throws IOException {
+    blockStorage.close();
   }
 
   @Override protected void nodeCreated(Node<K, V> node) {
@@ -105,20 +110,8 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
     return Collections.unmodifiableSet(nodeIdsToBlockIds.keySet());
   }
 
-  void vacuum() throws IOException {
-    var blockIdMapping = blockStorage.vacuum();
-    var oldBlockIdToNodeId = nodeIdsToBlockIds.entrySet().stream()
-        .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
-    Preconditions.checkState(oldBlockIdToNodeId.size() == nodeIdsToBlockIds.size());
-    Preconditions.checkState(oldBlockIdToNodeId.size() == blockIdMapping.size());
-
-    blockIdMapping.forEach((oldBlockId, newBlockId) -> {
-      var nodeId = oldBlockIdToNodeId.get(oldBlockId);
-      Preconditions.checkState(nodeId != null);
-      var putResult = nodeIdsToBlockIds.put(nodeId, newBlockId);
-      Preconditions.checkState(putResult != null && putResult.equals(oldBlockId));
-    });
-    metadataStorage.updateMetadata(this::updateMetadata);
+  public Vacuum vacuum() {
+    return new Vacuum(blockStorage.vacuum());
   }
 
   void writeChanges() throws IOException {
@@ -168,6 +161,39 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
 
   private void updateMetadata(SerializationHelper helper) throws IOException {
     helper.writeMap(nodeIdsToBlockIds, Serializer.longSerializer(), Serializer.longSerializer());
+  }
+
+  public class Vacuum {
+
+    private final BlockStorage.BlockStorageVacuum vacuum;
+
+    public Vacuum(BlockStorage.BlockStorageVacuum vacuum) {
+      this.vacuum = vacuum;
+    }
+
+    public void writeNewFile() throws IOException {
+      vacuum.writeNewFile();
+    }
+
+    public void commit() throws IOException {
+      var blockIdMapping = vacuum.commit();
+      var oldBlockIdToNodeId = nodeIdsToBlockIds.entrySet().stream()
+          .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+      Preconditions.checkState(oldBlockIdToNodeId.size() == nodeIdsToBlockIds.size());
+      Preconditions.checkState(oldBlockIdToNodeId.size() == blockIdMapping.size());
+
+      blockIdMapping.forEach((oldBlockId, newBlockId) -> {
+        var nodeId = oldBlockIdToNodeId.get(oldBlockId);
+        Preconditions.checkState(nodeId != null);
+        var putResult = nodeIdsToBlockIds.put(nodeId, newBlockId);
+        Preconditions.checkState(putResult != null && putResult.equals(oldBlockId));
+      });
+      metadataStorage.updateMetadata(BlockBTreeStorage.this::updateMetadata);
+    }
+
+    public void abort() {
+      vacuum.abort();
+    }
   }
 
   static class IOExceptionWrapper extends RuntimeException {
