@@ -22,6 +22,10 @@ public class BlockStats {
     return unused;
   }
 
+  public double unusedBytesFraction() {
+    return (double) unused.getBytes() / (double) (unused.getBytes() + used.getBytes());
+  }
+
   @Override public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
@@ -38,6 +42,7 @@ public class BlockStats {
     return MoreObjects.toStringHelper(this)
         .add("used", used)
         .add("unused", unused)
+        .add("percentUnused", String.format("%.1f%%", 100 * unusedBytesFraction()))
         .toString();
   }
 }

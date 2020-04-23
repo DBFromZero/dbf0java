@@ -9,6 +9,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStorage<K, V> {
 
@@ -102,6 +103,22 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
 
   @Override public Set<Long> getIdsInUse() {
     return Collections.unmodifiableSet(nodeIdsToBlockIds.keySet());
+  }
+
+  void vacuum() throws IOException {
+    var blockIdMapping = blockStorage.vacuum();
+    var oldBlockIdToNodeId = nodeIdsToBlockIds.entrySet().stream()
+        .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+    Preconditions.checkState(oldBlockIdToNodeId.size() == nodeIdsToBlockIds.size());
+    Preconditions.checkState(oldBlockIdToNodeId.size() == blockIdMapping.size());
+
+    blockIdMapping.forEach((oldBlockId, newBlockId) -> {
+      var nodeId = oldBlockIdToNodeId.get(oldBlockId);
+      Preconditions.checkState(nodeId != null);
+      var putResult = nodeIdsToBlockIds.put(nodeId, newBlockId);
+      Preconditions.checkState(putResult != null && putResult.equals(oldBlockId));
+    });
+    metadataStorage.updateMetadata(this::updateMetadata);
   }
 
   void writeChanges() throws IOException {

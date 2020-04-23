@@ -346,13 +346,14 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     int bestStart = -1;
     int bestEnd = -1;
     int bestCombinedSize = 0;
+    var leafCapacity = storage.getConfig().getLeafCapacity();
     for (int i = start; i < end; i++) {
       for (int j = i + 1; j <= end; j++) {
         int combinedSize = 0;
         for (int k = i; k <= j; k++) {
           combinedSize += getChild(k).size();
         }
-        if (combinedSize <= getCapacity() && combinedSize > bestCombinedSize) {
+        if (combinedSize <= leafCapacity && combinedSize > bestCombinedSize) {
           bestCombinedSize = combinedSize;
           bestStart = i;
           bestEnd = j;

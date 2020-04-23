@@ -1,38 +1,44 @@
 package dbf0.disk_key_value.readwrite.blocks;
 
+import com.google.common.base.Functions;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import dbf0.common.Dbf0Util;
 import dbf0.common.PositionTrackingStream;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
-public class FileBlockStorage implements BlockStorage {
+public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
 
-  private final File file;
+  private static final Logger LOGGER = Dbf0Util.getLogger(FileBlockStorage.class);
+
+  private final FileOperations<T> fileOperations;
   private final MetadataStorage metadataStorage;
 
-  private FileOutputStream fileOutputStream;
-  private PositionTrackingStream stream;
+  private T outputStream;
+  private PositionTrackingStream positionTrackingStream;
   private SerializationHelper serializationHelper;
   private FileBlockWriter blockWriter;
   private boolean inBatch = false;
-  private final Map<Long, Integer> usedBlockLengths = new HashMap<>();
+  private Map<Long, Integer> usedBlockLengths = new HashMap<>();
   private final Map<Long, Integer> unusedBlocksLengths = new HashMap<>();
 
 
-  public FileBlockStorage(File file, MetadataStorage metadataStorage) {
-    this.file = file;
+  public FileBlockStorage(FileOperations<T> fileOperations, MetadataStorage metadataStorage) {
+    this.fileOperations = fileOperations;
     this.metadataStorage = metadataStorage;
   }
 
+  public static FileBlockStorage<FileOutputStream> forFile(File file, MetadataStorage metadataStorage) {
+    return new FileBlockStorage<>(new FileOperationsImpl(file, "-vacuum"), metadataStorage);
+  }
+
   public void initialize() throws IOException {
-    if (file.exists()) {
-      Preconditions.checkState(file.isFile(), "%s is not a file", file);
+    if (fileOperations.exists()) {
     } else {
       createNew();
     }
@@ -60,7 +66,7 @@ public class FileBlockStorage implements BlockStorage {
       Preconditions.checkState(blockWriter == this);
       isCommitted = true;
       //TODO: safe long to int
-      var length = (int) (stream.getPosition() - blockId);
+      var length = (int) (positionTrackingStream.getPosition() - blockId);
       Preconditions.checkState(length > 0, "nothing written");
       usedBlockLengths.put(blockId, length);
       blockWriter = null;
@@ -71,20 +77,21 @@ public class FileBlockStorage implements BlockStorage {
   }
 
   @Override public BlockWriter writeBlock() throws IOException {
-    Preconditions.checkState(stream != null, " not initialized");
+    Preconditions.checkState(positionTrackingStream != null, " not initialized");
     Preconditions.checkState(blockWriter == null, "already writing");
-    blockWriter = new FileBlockWriter(stream.getPosition(), serializationHelper);
+    blockWriter = new FileBlockWriter(positionTrackingStream.getPosition(), serializationHelper);
     return blockWriter;
   }
 
   @Override public DeserializationHelper readBlock(long blockId) throws IOException {
     var length = usedBlockLengths.get(blockId);
+    if (length == null) {
+      System.out.println();
+    }
     Preconditions.checkArgument(length != null, "no such block id %s", blockId);
 
-    try (var inputStream = new FileInputStream(file)) {
-      var skipped = inputStream.skip(blockId);
-      Preconditions.checkState(skipped == blockId, "failed to skip %s, only skipped %",
-          blockId, skipped);
+    try (var inputStream = fileOperations.createInputStream()) {
+      skip(inputStream, blockId);
 
       // TODO, if block is large enough, return a DeserializationHelper backed by a stream
       var bytes = new byte[length];
@@ -106,13 +113,38 @@ public class FileBlockStorage implements BlockStorage {
     return new BlockStats(counts(usedBlockLengths), counts(unusedBlocksLengths));
   }
 
-  @Override public <T> void vacuum(BlockReWriter<T> blockReWriter) throws IOException {
+  @Override public Map<Long, Long> vacuum() throws IOException {
+    Preconditions.checkState(!inBatch);
+    LOGGER.info(() -> "Vacuuming. Initial stats: " + getStats());
+    var overWriter = fileOperations.createOverWriter();
+    try {
+      Map<Long, Long> mapping;
+      long finalLength;
+      try (var vacuumStream = new PositionTrackingStream(overWriter.getOutputStream())) {
+        mapping = runVacuum(vacuumStream);
+        finalLength = vacuumStream.getPosition();
+      }
+      overWriter.commit();
+      updateBlockMappings(mapping);
+      writeMetadata();
+      setupOutputStream(finalLength);
+      LOGGER.info(() -> "Vacuuming succeeded. Final stats: " + getStats());
+      return mapping;
+    } catch (IOException e) {
+      LOGGER.warning(() -> Strings.lenientFormat("Vacuuming failed due to %s. Attempting to abort", e));
+      overWriter.abort();
+      throw e;
+    }
   }
 
   private void createNew() throws IOException {
-    fileOutputStream = new FileOutputStream(file);
-    stream = new PositionTrackingStream(fileOutputStream);
-    serializationHelper = new SerializationHelper(stream);
+    setupOutputStream(0L);
+  }
+
+  private void setupOutputStream(long startingPosition) throws IOException {
+    outputStream = fileOperations.createAppendOutputStream();
+    positionTrackingStream = new PositionTrackingStream(outputStream, startingPosition);
+    serializationHelper = new SerializationHelper(positionTrackingStream);
   }
 
   private void load() throws IOException {
@@ -131,8 +163,56 @@ public class FileBlockStorage implements BlockStorage {
   }
 
   private void postWrite() throws IOException {
-    stream.flush();
-    fileOutputStream.getFD().sync();
+    positionTrackingStream.flush();
+    fileOperations.sync(outputStream);
     writeMetadata();
+  }
+
+  private Map<Long, Long> runVacuum(PositionTrackingStream vacuumStream) throws IOException {
+    Map<Long, Long> oldToNewBlockOffsets = new HashMap<>();
+    var sortedBlockOffsets = usedBlockLengths.keySet().stream().sorted().collect(Collectors.toList());
+    long currentInputPosition = 0;
+    var buffer = new byte[2048];
+    try (var inputStream = fileOperations.createInputStream()) {
+      for (var oldBlockOffset : sortedBlockOffsets) {
+        var length = usedBlockLengths.get(oldBlockOffset);
+        var newBlockOffset = vacuumStream.getPosition();
+        LOGGER.fine(() -> "offset mapping old=" + oldBlockOffset + " -> " + newBlockOffset + " (len=" + length + ")");
+        oldToNewBlockOffsets.put(oldBlockOffset, newBlockOffset);
+        skip(inputStream, oldBlockOffset - currentInputPosition);
+        copyBlock(inputStream, vacuumStream, length, buffer);
+        currentInputPosition = oldBlockOffset + length;
+      }
+    }
+    return oldToNewBlockOffsets;
+  }
+
+  private static void copyBlock(InputStream input, OutputStream output, int count, byte[] buffer) throws IOException {
+    Preconditions.checkState(count > 0);
+    while (count > 0) {
+      var read = input.read(buffer, 0, Math.min(count, buffer.length));
+      if (read <= 0) {
+        throw new IOException("Unexpected end of stream w/ " + count + " remaining");
+      }
+      output.write(buffer, 0, read);
+      count -= read;
+    }
+  }
+
+  // only called after we've written the new file to update block length mappings
+  private void updateBlockMappings(Map<Long, Long> oldToNewBlockOffsets) {
+    LOGGER.finer(() -> "Old block length: " + usedBlockLengths.toString());
+    Preconditions.checkState(oldToNewBlockOffsets.size() == usedBlockLengths.size());
+    usedBlockLengths = oldToNewBlockOffsets.entrySet().stream().collect(Collectors.toMap(
+        Map.Entry::getValue,
+        Functions.compose(usedBlockLengths::get, Map.Entry::getKey)));
+    unusedBlocksLengths.clear();
+    LOGGER.finer(() -> "New block length: " + usedBlockLengths.toString());
+  }
+
+  private static void skip(InputStream inputStream, long offset) throws IOException {
+    var skipped = inputStream.skip(offset);
+    Preconditions.checkState(skipped == offset, "failed to skip %s, only skipped %",
+        offset, skipped);
   }
 }

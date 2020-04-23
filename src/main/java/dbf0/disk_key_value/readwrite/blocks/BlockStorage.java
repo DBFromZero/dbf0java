@@ -3,6 +3,7 @@ package dbf0.disk_key_value.readwrite.blocks;
 import com.google.common.base.Preconditions;
 
 import java.io.IOException;
+import java.util.Map;
 
 public interface BlockStorage {
 
@@ -32,11 +33,7 @@ public interface BlockStorage {
 
   BlockStats getStats();
 
-  interface BlockReWriter<T> {
-    // TODO
-  }
-
-  <T> void vacuum(BlockReWriter<T> blockReWriter) throws IOException;
+  Map<Long, Long> vacuum() throws IOException;
 
   abstract class BaseBlockWriter<T extends SerializationHelper> implements BlockWriter {
 

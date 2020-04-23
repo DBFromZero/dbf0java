@@ -6,6 +6,8 @@ import dbf0.common.ByteArrayWrapper;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class MemoryBlockStorage implements BlockStorage {
 
@@ -47,6 +49,7 @@ public class MemoryBlockStorage implements BlockStorage {
     );
   }
 
-  @Override public <T> void vacuum(BlockReWriter<T> blockReWriter) {
+  @Override public Map<Long, Long> vacuum() throws IOException {
+    return blocks.keySet().stream().collect(Collectors.toMap(Function.identity(), Function.identity()));
   }
 }

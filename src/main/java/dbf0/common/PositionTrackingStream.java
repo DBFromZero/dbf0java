@@ -7,15 +7,25 @@ import java.io.*;
 public class PositionTrackingStream extends BufferedOutputStream {
 
   public static final int DEFAULT_BUFFER_SIZE = 0x8000;
-  private long position = 0;
+  private long position;
 
   public PositionTrackingStream(OutputStream outputStream, int bufferSize) {
-    super(outputStream, bufferSize);
+    this(outputStream, bufferSize, 0L);
   }
 
   public PositionTrackingStream(OutputStream outputStream) {
-    this(outputStream, DEFAULT_BUFFER_SIZE);
+    this(outputStream, DEFAULT_BUFFER_SIZE, 0L);
   }
+
+  public PositionTrackingStream(OutputStream outputStream, int bufferSize, long startPosition) {
+    super(outputStream, bufferSize);
+    this.position = startPosition;
+  }
+
+  public PositionTrackingStream(OutputStream outputStream, long startPosition) {
+    this(outputStream, DEFAULT_BUFFER_SIZE, startPosition);
+  }
+
 
   public PositionTrackingStream(String path) throws FileNotFoundException {
     this(new FileOutputStream(path), 0x8000);

@@ -14,6 +14,10 @@ public abstract class BaseBTreeStorage<K extends Comparable<K>, V> implements BT
     this(config, 0);
   }
 
+  @Override public BTreeConfig getConfig() {
+    return config;
+  }
+
   protected abstract void nodeCreated(Node<K, V> node);
 
   @Override public LeafNode<K, V> createLeaf() {
