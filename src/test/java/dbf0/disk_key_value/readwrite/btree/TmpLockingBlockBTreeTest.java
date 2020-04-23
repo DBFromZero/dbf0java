@@ -78,9 +78,10 @@ public class TmpLockingBlockBTreeTest {
     if (callback) {
       var count = new AtomicInteger(0);
       builder.setIterationCallback((ignored) -> {
-        if (count.incrementAndGet() % 20 == 0) {
+        if (count.incrementAndGet() % 50 == 0) {
+          var size = btree.size();
           var stats = btree.withReadLock(blockStorage::getStats);
-          LOGGER.info("Stats: " + stats);
+          LOGGER.info("size: " + size + " stats: " + stats);
         }
       });
     }

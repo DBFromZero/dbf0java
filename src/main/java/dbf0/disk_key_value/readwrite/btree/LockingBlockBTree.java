@@ -47,7 +47,7 @@ public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V
     }
   }
 
-  void initialize() throws IOException {
+  public void initialize() throws IOException {
     tree.initialize();
   }
 
