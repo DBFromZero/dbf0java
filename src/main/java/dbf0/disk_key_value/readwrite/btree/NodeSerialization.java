@@ -2,9 +2,9 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import dbf0.disk_key_value.readwrite.blocks.DeserializationHelper;
-import dbf0.disk_key_value.readwrite.blocks.SerializationHelper;
-import dbf0.disk_key_value.readwrite.blocks.SerializationPair;
+import dbf0.disk_key_value.io.DeserializationHelper;
+import dbf0.disk_key_value.io.SerializationHelper;
+import dbf0.disk_key_value.io.SerializationPair;
 
 import java.io.IOException;
 import java.util.Map;

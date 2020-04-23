@@ -2,6 +2,8 @@ package dbf0.disk_key_value.readwrite.blocks;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
+import dbf0.disk_key_value.io.ByteSerializationHelper;
+import dbf0.disk_key_value.io.DeserializationHelper;
 
 import java.io.IOException;
 import java.util.HashMap;

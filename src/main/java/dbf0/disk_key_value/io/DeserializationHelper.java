@@ -1,4 +1,4 @@
-package dbf0.disk_key_value.readwrite.blocks;
+package dbf0.disk_key_value.io;
 
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
@@ -9,8 +9,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-import static dbf0.disk_key_value.readwrite.blocks.SerializationHelper.INT_BYTES;
-import static dbf0.disk_key_value.readwrite.blocks.SerializationHelper.LONG_BYTES;
+import static dbf0.disk_key_value.io.SerializationHelper.INT_BYTES;
+import static dbf0.disk_key_value.io.SerializationHelper.LONG_BYTES;
 
 public class DeserializationHelper {
 

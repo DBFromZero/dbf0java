@@ -1,18 +1,13 @@
-package dbf0.disk_key_value.readwrite.blocks;
+package dbf0.disk_key_value.io;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 
-public interface FileOperations<T extends OutputStream> {
-
-  boolean exists() throws IOException;
+public interface FileOperations<T extends OutputStream> extends ReadOnlyFileOperations {
 
   T createAppendOutputStream() throws IOException;
 
   void sync(T outputStream) throws IOException;
-
-  InputStream createInputStream() throws IOException;
 
   OverWriter<T> createOverWriter() throws IOException;
 

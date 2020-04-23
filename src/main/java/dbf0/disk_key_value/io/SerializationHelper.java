@@ -1,4 +1,4 @@
-package dbf0.disk_key_value.readwrite.blocks;
+package dbf0.disk_key_value.io;
 
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.PrefixIo;

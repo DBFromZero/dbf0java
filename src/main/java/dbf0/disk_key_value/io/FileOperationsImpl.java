@@ -1,30 +1,23 @@
-package dbf0.disk_key_value.readwrite.blocks;
+package dbf0.disk_key_value.io;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.Dbf0Util;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class FileOperationsImpl implements FileOperations<FileOutputStream> {
+public class FileOperationsImpl extends ReadOnlyFileOperationsImpl implements FileOperations<FileOutputStream> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(FileOperationsImpl.class);
 
-  private final File file;
   private final String tempSuffix;
 
   public FileOperationsImpl(File file, String tempSuffix) {
-    this.file = Preconditions.checkNotNull(file);
+    super(file);
     this.tempSuffix = Preconditions.checkNotNull(tempSuffix);
-  }
-
-  @Override public boolean exists() throws IOException {
-    if (!file.exists()) {
-      return false;
-    }
-    Preconditions.checkState(file.isFile(), "%s is not a file", file);
-    return true;
   }
 
   @Override public FileOutputStream createAppendOutputStream() throws IOException {
@@ -33,10 +26,6 @@ public class FileOperationsImpl implements FileOperations<FileOutputStream> {
 
   @Override public void sync(FileOutputStream outputStream) throws IOException {
     outputStream.getFD().sync();
-  }
-
-  @Override public InputStream createInputStream() throws IOException {
-    return new FileInputStream(file);
   }
 
   @Override public OverWriter<FileOutputStream> createOverWriter() throws IOException {

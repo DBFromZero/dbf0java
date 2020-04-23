@@ -2,9 +2,9 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.squareup.burst.BurstJUnit4;
 import com.squareup.burst.annotation.Burst;
+import dbf0.disk_key_value.io.SerializationPair;
 import dbf0.disk_key_value.readwrite.blocks.MemoryBlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.MemoryMetadataMap;
-import dbf0.disk_key_value.readwrite.blocks.SerializationPair;
 import dbf0.test.Count;
 import dbf0.test.KeySetSize;
 import dbf0.test.RandomSeed;
