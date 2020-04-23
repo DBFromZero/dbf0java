@@ -3,6 +3,7 @@ package dbf0.disk_key_value.readwrite.btree;
 import com.google.common.base.Joiner;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
 import dbf0.test.*;
+import org.junit.Assume;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -91,6 +92,17 @@ abstract class BaseBTreeTest {
         .setIterationCallback((ignored) -> validateIdsInUse(btree))
         .build()
         .testPutDeleteGet(count.count, putDeleteGet, knownKeyRate);
+  }
+
+  @Test public void testLarge() throws IOException {
+    var btree = bTree();
+    Assume.assumeTrue(btree.getStorage().getConfig().getLeafCapacity() == 4);
+
+    ReadWriteStorageTester.builderForIntegers(btree, RandomSeed.CAFE, KeySetSize.S1000)
+        .setDebug(isDebug())
+        .setIterationCallback((ignored) -> validateIdsInUse(btree))
+        .build()
+        .testPutDeleteGet(100 * 1000, PutDeleteGet.BALANCED, KnownKeyRate.MID);
   }
 
   protected void validateIdsInUse(BTree<Integer, Integer> btree) throws IOException {

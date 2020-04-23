@@ -3,15 +3,19 @@ package dbf0.disk_key_value.readwrite.btree;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import dbf0.common.Dbf0Util;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public abstract class Node<K extends Comparable<K>, V> {
+
+  private static final Logger LOGGER = Dbf0Util.getLogger(Node.class);
 
   protected final K[] keys;
   protected int count;
@@ -120,6 +124,7 @@ public abstract class Node<K extends Comparable<K>, V> {
   }
 
   protected ParentNode<K, V> split(K keyToAdd) {
+    LOGGER.fine(() -> String.format("splitting %s to add %s", this, keyToAdd));
     Preconditions.checkState(isFull());
     var parentOptional = optionalParent();
     var useCurrentParent = parentOptional.map(x -> !x.isFull()).orElse(false);
@@ -130,6 +135,9 @@ public abstract class Node<K extends Comparable<K>, V> {
     nodeChanged();
     splitParent.addNode(split);
     splitParent.addNode(this);
+    if (!useCurrentParent) {
+      parentOptional.ifPresent(parent -> parent.addNode(splitParent));
+    }
     return splitParent;
   }
 

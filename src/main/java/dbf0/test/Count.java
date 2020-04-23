@@ -8,7 +8,6 @@ public enum Count {
   N2(2),
   N4(4),
   N10(10),
-  N50(50),
   N100(100);
 
   Count(int count) {

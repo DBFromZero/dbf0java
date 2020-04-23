@@ -16,7 +16,7 @@ public class MemoryBTreeTest extends BaseBTreeTest {
 
   public void testManualBurst() throws IOException {
     capacity = Capacity.C2;
-    testPutDeleteGet(RandomSeed.CAFE, Count.N50, KeySetSize.S10, PutDeleteGet.DELETE_HEAVY, KnownKeyRate.LOW);
+    testPutDeleteGet(RandomSeed.CAFE, Count.N100, KeySetSize.S10, PutDeleteGet.DELETE_HEAVY, KnownKeyRate.LOW);
   }
 
   @Override protected boolean isDebug() {

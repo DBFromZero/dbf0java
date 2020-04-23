@@ -2,14 +2,18 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import dbf0.common.Dbf0Util;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
+  private static final Logger LOGGER = Dbf0Util.getLogger(LeafNode.class);
+
   private final V[] values;
 
   LeafNode(long id, int capacity, @NotNull BTreeStorage<K, V> storage) {
@@ -39,6 +43,7 @@ public class LeafNode<K extends Comparable<K>, V> extends Node<K, V> {
   }
 
   @Override public Node<K, V> put(K key, V value) {
+    LOGGER.finer(() -> Joiner.on(" ").join("leaf put", key, this));
     if (count == 0) {
       keys[0] = key;
       values[0] = value;

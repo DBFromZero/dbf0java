@@ -4,14 +4,18 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Streams;
+import dbf0.common.Dbf0Util;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
+  private static final Logger LOGGER = Dbf0Util.getLogger(ParentNode.class);
+
   // use boxed array so that it can be passed to generic Object[] methods
   private final Long[] childIds;
 
@@ -92,13 +96,11 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
 
   @Override public Node<K, V> put(K key, V value) {
     Preconditions.checkState(count > 0);
-    if (false) {
-      System.out.println(Joiner.on(" ").join("parent put",
-          key,
-          "sz=" + size(),
-          this
-      ));
-    }
+    LOGGER.finer(() -> Joiner.on(" ").join("parent put",
+        key,
+        // "sz=" + size(),
+        this
+    ));
 
     var index = binarySearch(key);
     if (index >= 0) {
@@ -119,20 +121,7 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
 
     // if key is in the range of this child, then we have to give it to that child
     if (child.minKey().compareTo(key) <= 0 && child.maxKey().compareTo(key) >= 0) {
-      var result = child.put(key, value);
-      // put can cause the child to split and it may reuse it's current parent node, which is `this`
-      if (result != this && result != child) {
-        // child.put(k,v) can lead to child.split().put(k, v)
-        // if the split reuse this node then we recurse into call this.put again
-        // if on this second call we're full, then we split and created a new node above us
-        // hence it is possible for the result of child.put(k, v) to return a node that
-        // is actually our new parent
-        if (this.getParentId() == result.id) {
-          return result;
-        }
-        addNode(result);
-      }
-      return this;
+      return selectPutResult(child.put(key, value));
     }
 
     // if the child is not full, prefer to add entry to existing leaf child rather than creating new node
@@ -151,7 +140,6 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     insertNode(createLeaf(key, value), index);
     return this;
   }
-
 
   @Override boolean delete(K key) {
     //System.out.println("delete key=" + key + " in " + this);
@@ -193,8 +181,13 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
       return;
     }
     var index = binarySearch(maxKey);
-    Preconditions.checkState(index < 0);
-    insertNode(node, -(index + 1));
+    if (index >= 0) {
+      var existing = getChild(index);
+      throw new IllegalStateException(String.format("%s already contains %s at %s as %s",
+          this, node, index, existing));
+    } else {
+      insertNode(node, invertNegativeBinarySearchIndex(index));
+    }
   }
 
   void removeNode(Node<K, V> node) {
@@ -311,15 +304,19 @@ class ParentNode<K extends Comparable<K>, V> extends Node<K, V> {
     return result;
   }
 
+  private Node<K, V> selectPutResult(Node<K, V> result) {
+    // the child can be split an arbitrary number of times, and these splits can cascade up
+    // and involve not just splitting this node, but possibly its parent(s) as well
+    // hence we need we're only the result node if the result of putting has us as the parent,
+    // including if the result is the current child
+    return result.getParentId() == id ? this : result;
+  }
+
   private Node<K, V> putFull(K key, V value, Node<K, V> child) {
     // splitting at capacity 2 won't allow us to insert a new leaf node since we'll still have
     // two children. instead have to push the key down to a LeafNode
     if (getCapacity() == 2) {
-      var result = child.put(key, value);
-      if (result != child) {
-        addNode(result);
-      }
-      return this;
+      return selectPutResult(child.put(key, value));
     }
     return split(key).put(key, value);
   }
