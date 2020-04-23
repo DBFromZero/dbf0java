@@ -6,9 +6,7 @@ import com.google.gson.Gson;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.IoRunnable;
-import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
-import dbf0.disk_key_value.readwrite.blocks.MemoryMetadataStorage;
-import dbf0.disk_key_value.readwrite.blocks.SerializationPair;
+import dbf0.disk_key_value.readwrite.blocks.*;
 import dbf0.disk_key_value.readwrite.btree.*;
 import dbf0.test.PutDeleteGet;
 
@@ -46,16 +44,17 @@ public class Benchmark {
     var duration = Duration.parse(argsItr.next());
     Preconditions.checkState(!argsItr.hasNext());
 
-    if (file.exists()) {
-      var deleted = file.delete();
-      Preconditions.checkState(deleted);
-    }
+    deleteFile(file);
+    var metadataFile = new File(file.getPath() + "-metadata");
 
     var config = new BTreeConfig(leafCapacity, parentCapacity);
-    var blockStorage = FileBlockStorage.forFile(file, new MemoryMetadataStorage());
+    var metadataStore = new FileMetadataStorage<>(new FileOperationsImpl(metadataFile, "-tmp"));
+    metadataStore.initialize();
+
+    var blockStorage = FileBlockStorage.forFile(file, metadataStore);
     var bTreeStorage = new BlockBTreeStorage<>(
         config,
-        new MemoryMetadataStorage(),
+        metadataStore.newMap("btree", SerializationHelper::writeLong, SerializationHelper::writeLong),
         blockStorage,
         new NodeSerialization<>(
             config,
@@ -68,7 +67,6 @@ public class Benchmark {
 
     blockStorage.initialize();
     btree.initialize();
-
 
     var countPut = new AtomicInteger(0);
     var countDelete = new AtomicInteger(0);
@@ -149,6 +147,13 @@ public class Benchmark {
         .put("getFound", countFound.get())
         .build();
     System.out.println(new Gson().toJson(stats));
+  }
+
+  public static void deleteFile(File file) {
+    if (file.exists()) {
+      var deleted = file.delete();
+      Preconditions.checkState(deleted);
+    }
   }
 
   private static class KeyTracker {

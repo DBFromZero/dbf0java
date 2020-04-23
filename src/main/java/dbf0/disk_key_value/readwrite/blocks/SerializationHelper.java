@@ -6,6 +6,7 @@ import dbf0.common.PrefixIo;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.Map;
 
 public class SerializationHelper {
@@ -34,6 +35,10 @@ public class SerializationHelper {
 
   public void writeBytes(ByteArrayWrapper w) throws IOException {
     PrefixIo.writeBytes(outputStream, w);
+  }
+
+  public void writeString(String s) throws IOException {
+    writeBytes(ByteArrayWrapper.of(s.getBytes(Charset.defaultCharset())));
   }
 
   public <K, V> void writeMap(Map<K, V> map, Serializer<K> keySerializer, Serializer<V> valueSerializer) throws IOException {

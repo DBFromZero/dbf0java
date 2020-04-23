@@ -2,9 +2,7 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import dbf0.common.Dbf0Util;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
-import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
-import dbf0.disk_key_value.readwrite.blocks.MemoryMetadataStorage;
-import dbf0.disk_key_value.readwrite.blocks.SerializationPair;
+import dbf0.disk_key_value.readwrite.blocks.*;
 import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
 import dbf0.test.RandomSeed;
@@ -22,15 +20,18 @@ public class TmpFileBlockStorageTest {
   @Test public void testIt() throws IOException {
     Dbf0Util.enableConsoleLogging(Level.FINEST);
     var file = new File("/data/tmp/btree_test");
-    if (file.exists()) {
-      var deleted = file.delete();
-      assertThat(deleted).isTrue();
-    }
+    var metadataFile = new File("/data/tmp/btree_test_metadata");
+
+    deleteFile(file);
+    deleteFile(metadataFile);
     var config = new BTreeConfig(8, 16);
-    var blockStorage = FileBlockStorage.forFile(file, new MemoryMetadataStorage());
+    var metadataStore = new FileMetadataStorage<>(new FileOperationsImpl(metadataFile, "-tmp"));
+    metadataStore.initialize();
+
+    var blockStorage = FileBlockStorage.forFile(file, metadataStore);
     var bTreeStorage = new BlockBTreeStorage<>(
         config,
-        new MemoryMetadataStorage(),
+        metadataStore.newMap("btree", SerializationHelper::writeLong, SerializationHelper::writeLong),
         blockStorage,
         new NodeSerialization<>(
             config,
@@ -59,5 +60,12 @@ public class TmpFileBlockStorageTest {
         })
         .build()
         .testPutDeleteGet(100 * 1000, PutDeleteGet.PUT_HEAVY, KnownKeyRate.LOW);
+  }
+
+  public static void deleteFile(File file) {
+    if (file.exists()) {
+      var deleted = file.delete();
+      assertThat(deleted).isTrue();
+    }
   }
 }

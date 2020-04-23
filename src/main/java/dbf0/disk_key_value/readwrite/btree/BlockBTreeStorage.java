@@ -2,23 +2,23 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Preconditions;
 import dbf0.disk_key_value.readwrite.blocks.BlockStorage;
-import dbf0.disk_key_value.readwrite.blocks.MetadataStorage;
-import dbf0.disk_key_value.readwrite.blocks.SerializationHelper;
-import dbf0.disk_key_value.readwrite.blocks.Serializer;
+import dbf0.disk_key_value.readwrite.blocks.MetadataMap;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStorage<K, V> implements Closeable {
 
-  private final MetadataStorage metadataStorage;
+  private final MetadataMap<Long, Long> nodeIdsToBlockIds;
   private final BlockStorage blockStorage;
   private final NodeSerialization<K, V> serialization;
 
-  private final Map<Long, Long> nodeIdsToBlockIds = new HashMap<>();
 
   private final Map<Long, Node<K, V>> nodesToWrite = new HashMap<>();
   private final Set<Long> blocksToFree = new HashSet<>();
@@ -30,21 +30,21 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
 
   public BlockBTreeStorage(BTreeConfig config,
                            long nextId,
-                           MetadataStorage metadataStorage,
+                           MetadataMap<Long, Long> nodeIdsToBlockIds,
                            BlockStorage blockStorage,
                            NodeSerialization<K, V> serialization) {
     super(config, nextId);
-    this.metadataStorage = metadataStorage;
+    this.nodeIdsToBlockIds = nodeIdsToBlockIds;
     this.blockStorage = blockStorage;
     this.serialization = serialization;
   }
 
   public BlockBTreeStorage(BTreeConfig config,
-                           MetadataStorage metadataStorage,
+                           MetadataMap<Long, Long> nodeIdsToBlockIds,
                            BlockStorage blockStorage,
                            NodeSerialization<K, V> serialization) {
     super(config);
-    this.metadataStorage = metadataStorage;
+    this.nodeIdsToBlockIds = nodeIdsToBlockIds;
     this.blockStorage = blockStorage;
     this.serialization = serialization;
   }
@@ -91,7 +91,12 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
   }
 
   @Override public void deleteNode(long id) {
-    var blockId = nodeIdsToBlockIds.remove(id);
+    Long blockId;
+    try {
+      blockId = nodeIdsToBlockIds.delete(id);
+    } catch (IOException e) {
+      throw new IOExceptionWrapper(e);
+    }
     Preconditions.checkState(blockId != null, "no such node id %s", id);
     blocksToFree.add(blockId);
     nodesToWrite.remove(id);
@@ -107,7 +112,7 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
   }
 
   @Override public Set<Long> getIdsInUse() {
-    return Collections.unmodifiableSet(nodeIdsToBlockIds.keySet());
+    return nodeIdsToBlockIds.unmodifiableMap().keySet();
   }
 
   public Vacuum vacuum() {
@@ -131,7 +136,6 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
         }
       }
       nodesToWrite.clear();
-      metadataStorage.updateMetadata(this::updateMetadata);
     }
 
     for (var blockId : blocksToFree) {
@@ -142,14 +146,7 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
   }
 
   void load() throws IOException {
-    nodeIdsToBlockIds.clear();
-    var helper = metadataStorage.readMetadata();
-    var count = helper.readInt();
-    for (int i = 0; i < count; i++) {
-      var nodeId = helper.readLong();
-      var blockId = helper.readLong();
-      nodeIdsToBlockIds.put(nodeId, blockId);
-    }
+    throw new RuntimeException("not implemented");
   }
 
   private Node<K, V> loadNode(long nodeId) throws IOException {
@@ -157,10 +154,6 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
     Preconditions.checkState(blockId != null, "no such node id %s", nodeId);
     var block = blockStorage.readBlock(blockId);
     return serialization.deserialize(block, this);
-  }
-
-  private void updateMetadata(SerializationHelper helper) throws IOException {
-    helper.writeMap(nodeIdsToBlockIds, Serializer.longSerializer(), Serializer.longSerializer());
   }
 
   public class Vacuum {
@@ -177,18 +170,19 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
 
     public void commit() throws IOException {
       var blockIdMapping = vacuum.commit();
-      var oldBlockIdToNodeId = nodeIdsToBlockIds.entrySet().stream()
+      var oldBlockIdToNodeId = nodeIdsToBlockIds.unmodifiableMap().entrySet().stream()
           .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
       Preconditions.checkState(oldBlockIdToNodeId.size() == nodeIdsToBlockIds.size());
       Preconditions.checkState(oldBlockIdToNodeId.size() == blockIdMapping.size());
 
-      blockIdMapping.forEach((oldBlockId, newBlockId) -> {
+      for (var entry : blockIdMapping.entrySet()) {
+        var oldBlockId = entry.getKey();
+        var newBlockId = entry.getValue();
         var nodeId = oldBlockIdToNodeId.get(oldBlockId);
         Preconditions.checkState(nodeId != null);
         var putResult = nodeIdsToBlockIds.put(nodeId, newBlockId);
         Preconditions.checkState(putResult != null && putResult.equals(oldBlockId));
-      });
-      metadataStorage.updateMetadata(BlockBTreeStorage.this::updateMetadata);
+      }
     }
 
     public void abort() {

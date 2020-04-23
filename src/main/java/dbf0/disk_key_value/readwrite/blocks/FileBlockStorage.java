@@ -17,24 +17,28 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
   private static final Logger LOGGER = Dbf0Util.getLogger(FileBlockStorage.class);
 
   private final FileOperations<T> fileOperations;
-  private final MetadataStorage metadataStorage;
+  private final MetadataMap<Long, Integer> usedBlockLengths;
+  private final MetadataMap<Long, Integer> unusedBlocksLengths;
 
   private T outputStream;
   private PositionTrackingStream positionTrackingStream;
   private SerializationHelper serializationHelper;
   private FileBlockWriter blockWriter;
   private boolean inBatch = false;
-  private Map<Long, Integer> usedBlockLengths = new HashMap<>();
-  private final Map<Long, Integer> unusedBlocksLengths = new HashMap<>();
 
 
-  public FileBlockStorage(FileOperations<T> fileOperations, MetadataStorage metadataStorage) {
+  public FileBlockStorage(FileOperations<T> fileOperations,
+                          MetadataMap<Long, Integer> usedBlockLengths,
+                          MetadataMap<Long, Integer> unusedBlocksLengths) {
     this.fileOperations = fileOperations;
-    this.metadataStorage = metadataStorage;
+    this.usedBlockLengths = usedBlockLengths;
+    this.unusedBlocksLengths = unusedBlocksLengths;
   }
 
-  public static FileBlockStorage<FileOutputStream> forFile(File file, MetadataStorage metadataStorage) {
-    return new FileBlockStorage<>(new FileOperationsImpl(file, "-vacuum"), metadataStorage);
+  public static FileBlockStorage<FileOutputStream> forFile(File file, FileMetadataStorage<?> metadataStorage) {
+    return new FileBlockStorage<>(new FileOperationsImpl(file, "-vacuum"),
+        metadataStorage.newMap("used-blocks", SerializationHelper::writeLong, SerializationHelper::writeInt),
+        metadataStorage.newMap("unused-blocks", SerializationHelper::writeLong, SerializationHelper::writeInt));
   }
 
   public void initialize() throws IOException {
@@ -107,7 +111,7 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
   }
 
   @Override public void freeBlock(long blockId) throws IOException {
-    var length = usedBlockLengths.remove(blockId);
+    var length = usedBlockLengths.delete(blockId);
     Preconditions.checkArgument(length != null, "no such block id %s", blockId);
     unusedBlocksLengths.put(blockId, length);
     if (!inBatch) {
@@ -137,21 +141,14 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
     throw new RuntimeException("not implemented");
   }
 
-  private void writeMetadata() throws IOException {
-    metadataStorage.updateMetadata(helper -> {
-      helper.writeMap(usedBlockLengths, Serializer.longSerializer(), Serializer.intSerializer());
-      helper.writeMap(unusedBlocksLengths, Serializer.longSerializer(), Serializer.intSerializer());
-    });
-  }
-
-  private static BlockCounts counts(Map<Long, Integer> map) {
-    return new BlockCounts(map.size(), map.values().stream().mapToLong(x -> x).sum());
+  private static BlockCounts counts(MetadataMap<Long, Integer> map) {
+    var m = map.unmodifiableMap();
+    return new BlockCounts(m.size(), m.values().stream().mapToLong(x -> x).sum());
   }
 
   private void postWrite() throws IOException {
     positionTrackingStream.flush();
     fileOperations.sync(outputStream);
-    writeMetadata();
   }
 
   private class FileBlockStorageVacuum implements BlockStorageVacuum {
@@ -178,7 +175,6 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
         Preconditions.checkState(mapping != null);
         overWriter.commit();
         updateBlockMappings(mapping);
-        writeMetadata();
         setupOutputStream(finalLength);
         LOGGER.info(() -> "Vacuuming succeeded. Final stats: " + getStats());
         return mapping;
@@ -196,7 +192,7 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
 
   private Map<Long, Long> runVacuum(PositionTrackingStream vacuumStream) throws IOException {
     Map<Long, Long> oldToNewBlockOffsets = new HashMap<>();
-    var sortedBlockOffsets = usedBlockLengths.keySet().stream().sorted().collect(Collectors.toList());
+    var sortedBlockOffsets = usedBlockLengths.unmodifiableMap().keySet().stream().sorted().collect(Collectors.toList());
     long currentInputPosition = 0;
     var buffer = new byte[2048];
     try (var inputStream = fileOperations.createInputStream()) {
@@ -226,12 +222,14 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
   }
 
   // only called after we've written the new file to update block length mappings
-  private void updateBlockMappings(Map<Long, Long> oldToNewBlockOffsets) {
+  private void updateBlockMappings(Map<Long, Long> oldToNewBlockOffsets) throws IOException {
     LOGGER.finer(() -> "Old block length: " + usedBlockLengths.toString());
     Preconditions.checkState(oldToNewBlockOffsets.size() == usedBlockLengths.size());
-    usedBlockLengths = oldToNewBlockOffsets.entrySet().stream().collect(Collectors.toMap(
+    var newUsedBlocks = oldToNewBlockOffsets.entrySet().stream().collect(Collectors.toMap(
         Map.Entry::getValue,
         Functions.compose(usedBlockLengths::get, Map.Entry::getKey)));
+    usedBlockLengths.clear();
+    usedBlockLengths.putAll(newUsedBlocks);
     unusedBlocksLengths.clear();
     LOGGER.finer(() -> "New block length: " + usedBlockLengths.toString());
   }
