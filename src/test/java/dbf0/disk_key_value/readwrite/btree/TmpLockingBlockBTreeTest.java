@@ -3,6 +3,7 @@ package dbf0.disk_key_value.readwrite.btree;
 import com.google.common.collect.Streams;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
+import dbf0.common.ReadTwoStepWriteLock;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
 import dbf0.disk_key_value.readwrite.blocks.*;
 import dbf0.test.KnownKeyRate;
@@ -25,7 +26,10 @@ public class TmpLockingBlockBTreeTest {
   private static final Logger LOGGER = Dbf0Util.getLogger(TmpLockingBlockBTreeTest.class);
 
   @Test public void testIt() throws Exception {
-    Dbf0Util.enableConsoleLogging(Level.FINEST);
+    Dbf0Util.enableConsoleLogging(Level.INFO);
+    Dbf0Util.getLogger(ParentNode.class).setLevel(Level.INFO);
+    Dbf0Util.getLogger(Node.class).setLevel(Level.INFO);
+    Dbf0Util.getLogger(LeafNode.class).setLevel(Level.INFO);
 
 
     var file = new File("/data/tmp/btree_test");
@@ -49,20 +53,21 @@ public class TmpLockingBlockBTreeTest {
     var baseBTree = new BlockBTree<>(bTreeStorage);
     blockStorage.initialize();
 
+    var lock = new ReadTwoStepWriteLock();
     var btree = new LockingBlockBTree<>(baseBTree, bTreeStorage, () -> {
       var stats = blockStorage.getStats();
       return stats.unusedBytesFraction() > 0.8 & stats.getUnused().getBytes() > 1e7;
-    });
+    }, lock);
 
     blockStorage.initialize();
     btree.initialize();
 
     var threads = Streams.concat(
         Stream.of(createThread(btree, 8, PutDeleteGet.PUT_HEAVY, KnownKeyRate.LOW, true,
-            blockStorage)),
+            blockStorage, lock)),
         IntStream.range(0, 4).mapToObj(i ->
             createThread(btree, 10 + i, PutDeleteGet.GET_HEAVY, KnownKeyRate.HIGH, false,
-                blockStorage)
+                blockStorage, lock)
         )).collect(Collectors.toList());
 
     threads.forEach(Thread::start);
@@ -74,7 +79,7 @@ public class TmpLockingBlockBTreeTest {
 
   private Thread createThread(LockingBlockBTree<ByteArrayWrapper, ByteArrayWrapper> btree,
                               int keySize, PutDeleteGet putDeleteGet, KnownKeyRate knownKeyRate,
-                              boolean callback, BlockStorage blockStorage) {
+                              boolean callback, BlockStorage blockStorage, ReadTwoStepWriteLock lock) {
     var builder = ReadWriteStorageTester.builderForBytes(btree, RandomSeed.CAFE.random(), keySize, 4096)
         .setDebug(false)
         .setCheckSize(false);
@@ -83,7 +88,7 @@ public class TmpLockingBlockBTreeTest {
       builder.setIterationCallback((ignored) -> {
         if (count.incrementAndGet() % 50 == 0) {
           var size = btree.size();
-          var stats = btree.withReadLock(blockStorage::getStats);
+          var stats = lock.callWithReadLock(blockStorage::getStats);
           LOGGER.info("size: " + size + " stats: " + stats);
         }
       });

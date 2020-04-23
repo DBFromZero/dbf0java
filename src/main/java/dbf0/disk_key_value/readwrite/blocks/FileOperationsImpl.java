@@ -81,13 +81,16 @@ public class FileOperationsImpl implements FileOperations<FileOutputStream> {
 
 
     @Override public void abort() {
-      Preconditions.checkState(inProgress);
+      if (!inProgress) {
+        LOGGER.warning("Aborting while not in progress");
+        return;
+      }
       inProgress = false;
       LOGGER.info("Aborting writing " + file);
       try {
         tryClose();
       } catch (Exception e) {
-        LOGGER.log(Level.SEVERE, e, () -> "Ignoring error in closing file");
+        LOGGER.log(Level.WARNING, e, () -> "Ignoring error in closing file");
       } finally {
         try {
           var deleted = tempFile.delete();
@@ -98,7 +101,7 @@ public class FileOperationsImpl implements FileOperations<FileOutputStream> {
                 ". Will have to be removed manually");
           }
         } catch (Exception e) {
-          LOGGER.log(Level.SEVERE, e, () -> "Error in deleting temporary path");
+          LOGGER.log(Level.WARNING, e, () -> "Error in deleting temporary path");
         }
       }
     }

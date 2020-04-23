@@ -1,16 +1,13 @@
 package dbf0.disk_key_value.readwrite.btree;
 
 import dbf0.common.Dbf0Util;
+import dbf0.common.ReadTwoStepWriteLock;
 import dbf0.disk_key_value.readwrite.blocks.VacuumChecker;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -24,14 +21,19 @@ public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V
   private final BlockBTreeStorage<K, V> storage;
   private final VacuumChecker vacuumChecker;
 
-  private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock(true);
-  private final Lock extraWriteLock = new ReentrantLock();
+  private final ReadTwoStepWriteLock lock;
   private transient Thread vacuumThread;
 
-  public LockingBlockBTree(BlockBTree<K, V> tree, BlockBTreeStorage<K, V> storage, VacuumChecker vacuumChecker) {
+  public LockingBlockBTree(BlockBTree<K, V> tree, BlockBTreeStorage<K, V> storage, VacuumChecker vacuumChecker,
+                           ReadTwoStepWriteLock lock) {
     this.tree = tree;
     this.storage = storage;
     this.vacuumChecker = vacuumChecker;
+    this.lock = lock;
+  }
+
+  public LockingBlockBTree(BlockBTree<K, V> tree, BlockBTreeStorage<K, V> storage, VacuumChecker vacuumChecker) {
+    this(tree, storage, vacuumChecker, new ReadTwoStepWriteLock());
   }
 
   @Override public void close() throws IOException {
@@ -52,7 +54,7 @@ public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V
   }
 
   @Override public int size() throws IOException {
-    return withReadLock(tree::size);
+    return lock.callWithReadLock(tree::size);
   }
 
   @Override public BTreeStorage<K, V> getStorage() {
@@ -60,55 +62,31 @@ public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V
   }
 
   @Override public void put(@NotNull K key, @NotNull V value) throws IOException {
-    withWriteLocks(() -> {
-      tree.put(key, value);
-      return null;
-    });
+    lock.runWithWriteLocks(() -> tree.put(key, value));
+    vacuumCheck();
   }
 
   @Nullable @Override public V get(@NotNull K key) throws IOException {
-    return withReadLock(() -> tree.get(key));
+    return lock.callWithReadLock(() -> tree.get(key));
   }
 
   @Override public boolean delete(@NotNull K key) throws IOException {
-    return withWriteLocks(() -> tree.delete(key));
+    var deleted = lock.callWithWriteLocks(() -> tree.delete(key));
+    if (deleted) {
+      vacuumCheck();
+    }
+    return deleted;
   }
 
   @Override public Stream<Long> streamIdsInUse() throws IOException {
-    return withReadLock(() -> tree.streamIdsInUse().collect(Collectors.toList()).stream());
+    return lock.callWithReadLock(() -> tree.streamIdsInUse().collect(Collectors.toList()).stream());
   }
 
-  interface Operation<T> {
-    T run() throws IOException;
-  }
-
-  <T> T withReadLock(Operation<T> operation) throws IOException {
-    readWriteLock.readLock().lock();
-    try {
-      return operation.run();
-    } finally {
-      readWriteLock.readLock().unlock();
-    }
-  }
-
-  <T> T withWriteLocks(Operation<T> operation) throws IOException {
-    extraWriteLock.lock();
-    try {
-      T result;
-      readWriteLock.writeLock().lock();
-      try {
-        result = operation.run();
-      } finally {
-        readWriteLock.writeLock().unlock();
-      }
-      if (vacuumThread == null && vacuumChecker.vacuumNeeded()) {
-        LOGGER.fine("Starting vacuum thread");
-        vacuumThread = new Thread(new VacuumRunnable(storage.vacuum()));
-        vacuumThread.start();
-      }
-      return result;
-    } finally {
-      extraWriteLock.unlock();
+  private void vacuumCheck() {
+    if (vacuumThread == null && vacuumChecker.vacuumNeeded()) {
+      LOGGER.fine("Starting vacuum thread");
+      vacuumThread = new Thread(new VacuumRunnable(storage.vacuum()));
+      vacuumThread.start();
     }
   }
 
@@ -121,20 +99,12 @@ public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V
     }
 
     @Override public void run() {
-      extraWriteLock.lock();
       try {
-        vacuum.writeNewFile();
-        readWriteLock.writeLock().lock();
-        try {
-          vacuum.commit();
-        } finally {
-          readWriteLock.writeLock().unlock();
-        }
-      } catch (IOException e) {
+        lock.runWithTwoStepWriteLocks(vacuum::writeNewFile, vacuum::commit);
+      } catch (Exception e) {
         LOGGER.log(Level.SEVERE, e, () -> "error in vacuuming. aborting");
         vacuum.abort();
       } finally {
-        extraWriteLock.unlock();
         vacuumThread = null;
       }
     }
