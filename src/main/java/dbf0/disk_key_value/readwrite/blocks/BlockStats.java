@@ -26,6 +26,10 @@ public class BlockStats {
     return (double) unused.getBytes() / (double) (unused.getBytes() + used.getBytes());
   }
 
+  public long totalBytes() {
+    return used.getBytes() + unused.getBytes();
+  }
+
   @Override public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;

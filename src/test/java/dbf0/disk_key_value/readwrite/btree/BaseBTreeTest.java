@@ -74,7 +74,7 @@ abstract class BaseBTreeTest {
     var btree = bTree();
 
     ReadWriteStorageTester.builderForIntegers(btree, seed, keySetSize)
-        .setDebug(isDebug())
+        .debug(isDebug())
         .build()
         .testAddDeleteMany(count.count);
 
@@ -88,8 +88,8 @@ abstract class BaseBTreeTest {
                                      PutDeleteGet putDeleteGet, KnownKeyRate knownKeyRate) throws IOException {
     var btree = bTree();
     ReadWriteStorageTester.builderForIntegers(btree, seed, keySetSize)
-        .setDebug(isDebug())
-        .setIterationCallback((ignored) -> validateIdsInUse(btree))
+        .debug(isDebug())
+        .iterationCallback((ignored) -> validateIdsInUse(btree))
         .build()
         .testPutDeleteGet(count.count, putDeleteGet, knownKeyRate);
   }
@@ -99,8 +99,8 @@ abstract class BaseBTreeTest {
     Assume.assumeTrue(btree.getStorage().getConfig().getLeafCapacity() == 4);
 
     ReadWriteStorageTester.builderForIntegers(btree, RandomSeed.CAFE, KeySetSize.S1000)
-        .setDebug(isDebug())
-        .setIterationCallback((ignored) -> validateIdsInUse(btree))
+        .debug(isDebug())
+        .iterationCallback((ignored) -> validateIdsInUse(btree))
         .build()
         .testPutDeleteGet(100 * 1000, PutDeleteGet.BALANCED, KnownKeyRate.MID);
   }

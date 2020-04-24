@@ -35,7 +35,6 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
   private final ReadTwoStepWriteLock lock = new ReadTwoStepWriteLock();
   private final Map<ByteArrayWrapper, ByteArrayWrapper> pendingWrites = new HashMap<>();
   private int baseSize;
-  private int sizeReductionAdjustment;
 
   private T journalOutputStream;
   private RandomAccessKeyValueFileReader baseReader;
@@ -76,61 +75,36 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
 
   @Override public int size() throws IOException {
     Preconditions.checkState(!mergingAborted.get());
-    return lock.callWithReadLock(() -> baseSize + pendingWrites.size() - sizeReductionAdjustment);
+    throw new RuntimeException("not implemented");
   }
 
   @Override public void put(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
     Preconditions.checkState(!mergingAborted.get());
-    var pendingSize = lock.callWithWriteLocks(() -> {
-      var oldValue = pendingWrites.put(key, value);
-      if (oldValue != null && oldValue.equals(DELETE_VALUE)) {
-        sizeReductionAdjustment--; // replace a delete with an actual value
-      }
-      if (oldValue == null) {
-        var baseValue = baseReader == null ? null : baseReader.get(key);
-        if (baseValue != null) {
-          sizeReductionAdjustment++; // key now exists in two places, the map and the base and we only want to count it once
-        }
-      }
-      return pendingWrites.size();
+    lock.runWithWriteLocks(() -> {
+      pendingWrites.put(key, value);
+      checkMergeThreshold(pendingWrites.size());
     });
-    checkMergeThreshold(pendingSize);
   }
 
   @Nullable @Override public ByteArrayWrapper get(@NotNull ByteArrayWrapper key) throws IOException {
     Preconditions.checkState(!mergingAborted.get());
     return lock.callWithReadLock(() -> {
       var value = pendingWrites.get(key);
-      if (value == null && baseReader != null) {
-        return baseReader.get(key);
+      if (value != null) {
+        return value.equals(DELETE_VALUE) ? null : value;
       }
-      return value;
+      return baseReader == null ? null : baseReader.get(key);
     });
   }
 
   @Override public boolean delete(@NotNull ByteArrayWrapper key) throws IOException {
     // We always need to know if it's in the base
     Preconditions.checkState(!mergingAborted.get());
-    return lock.callWithWriteLocks(() -> {
-      var pendingValue = pendingWrites.get(key);
-      if (pendingValue != null && pendingValue.equals(DELETE_VALUE)) {
-        return false; // already deleted
-      }
-      // put already checks if in base for sizeReductionAdjustment adjustment w.r.t. base so no need to check again
-      if (pendingValue == null) {
-        // need to check the base to know if delete should return true and to change sizeReductionAdjustment accordingly
-        // note that for large values it would be useful to have a method that just returns whether the key is in the base
-        if (baseReader == null || baseReader.get(key) == null) {
-          return false; // not in pendingWrites nor in base
-        }
-        // adjust by two to count for removing key from base for adding key w/ DELETE_VALUE to pendingWrites
-        sizeReductionAdjustment++;
-      }
-      sizeReductionAdjustment++;
+    lock.runWithWriteLocks(() -> {
       pendingWrites.put(key, DELETE_VALUE);
       checkMergeThreshold(pendingWrites.size());
-      return true;
     });
+    return true;// doesn't actually return a useful value
   }
 
   private void checkMergeThreshold(int pendingWrites) throws IOException {
@@ -182,7 +156,6 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
       indexOverWriter.commit();
       indexOverWriter = null;
       pendingWrites.clear();
-      sizeReductionAdjustment = 0;
       baseSize = newBaseSize;
       baseReader = new RandomAccessKeyValueFileReader(baseFileOperations, RandomAccessKeyValueFileReader.readIndex(
           new KeyValueFileIterator(batchReader(baseIndexFileOperations))));

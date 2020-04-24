@@ -41,43 +41,49 @@ public class ReadWriteStorageTester<K, V> {
     private Random random;
     private boolean debug = false;
     private boolean checkSize = true;
+    private boolean checkDeleteReturnValue = true;
 
     private Builder(Adapter<K, V> adapter) {
       this.adapter = adapter;
     }
 
-    public Builder<K, V> setKnownKeySupplier(Supplier<K> knownKeySupplier) {
+    public Builder<K, V> knownKeySupplier(Supplier<K> knownKeySupplier) {
       this.knownKeySupplier = knownKeySupplier;
       return this;
     }
 
-    public Builder<K, V> setUnknownKeySupplier(Supplier<K> unknownKeySupplier) {
+    public Builder<K, V> unknownKeySupplier(Supplier<K> unknownKeySupplier) {
       this.unknownKeySupplier = unknownKeySupplier;
       return this;
     }
 
-    public Builder<K, V> setValueSupplier(Supplier<V> valueSupplier) {
+    public Builder<K, V> valueSupplier(Supplier<V> valueSupplier) {
       this.valueSupplier = valueSupplier;
       return this;
     }
 
-    public Builder<K, V> setIterationCallback(Callback<ReadWriteStorage<K, V>> iterationCallback) {
+    public Builder<K, V> iterationCallback(Callback<ReadWriteStorage<K, V>> iterationCallback) {
       this.iterationCallback = iterationCallback;
       return this;
     }
 
-    public Builder<K, V> setRandom(Random random) {
+    public Builder<K, V> random(Random random) {
       this.random = random;
       return this;
     }
 
-    public Builder<K, V> setDebug(boolean debug) {
+    public Builder<K, V> debug(boolean debug) {
       this.debug = debug;
       return this;
     }
 
-    public Builder<K, V> setCheckSize(boolean checkSize) {
+    public Builder<K, V> checkSize(boolean checkSize) {
       this.checkSize = checkSize;
+      return this;
+    }
+
+    public Builder<K, V> checkDeleteReturnValue(boolean checkDeleteReturnValue) {
+      this.checkDeleteReturnValue = checkDeleteReturnValue;
       return this;
     }
 
@@ -94,10 +100,10 @@ public class ReadWriteStorageTester<K, V> {
                                                              Random random,
                                                              int keySize) {
     return builder(storage)
-        .setKnownKeySupplier(() -> random.nextInt(keySize))
-        .setUnknownKeySupplier(() -> keySize + random.nextInt(keySize))
-        .setValueSupplier(random::nextInt)
-        .setRandom(random);
+        .knownKeySupplier(() -> random.nextInt(keySize))
+        .unknownKeySupplier(() -> keySize + random.nextInt(keySize))
+        .valueSupplier(random::nextInt)
+        .random(random);
   }
 
   public static Builder<Integer, Integer> builderForIntegers(ReadWriteStorage<Integer, Integer> storage,
@@ -112,10 +118,10 @@ public class ReadWriteStorageTester<K, V> {
       int keySize,
       int valueSize) {
     return builder(storage)
-        .setKnownKeySupplier(() -> ByteArrayWrapper.random(random, keySize))
-        .setUnknownKeySupplier(() -> ByteArrayWrapper.random(random, keySize + 1))
-        .setValueSupplier(() -> ByteArrayWrapper.random(random, valueSize))
-        .setRandom(random);
+        .knownKeySupplier(() -> ByteArrayWrapper.random(random, keySize))
+        .unknownKeySupplier(() -> ByteArrayWrapper.random(random, keySize + 1))
+        .valueSupplier(() -> ByteArrayWrapper.random(random, valueSize))
+        .random(random);
   }
 
   private final Adapter<K, V> adapter;
@@ -126,6 +132,7 @@ public class ReadWriteStorageTester<K, V> {
   private final Random random;
   private final boolean debug;
   private final boolean checkSize;
+  private final boolean checkDeleteReturnValue;
 
   private ReadWriteStorageTester(Builder<K, V> builder) {
     this.adapter = builder.adapter;
@@ -137,6 +144,7 @@ public class ReadWriteStorageTester<K, V> {
     this.random = Optional.ofNullable(builder.random).orElseGet(Random::new);
     this.debug = builder.debug;
     this.checkSize = builder.checkSize;
+    this.checkDeleteReturnValue = builder.checkDeleteReturnValue;
   }
 
 
@@ -155,12 +163,13 @@ public class ReadWriteStorageTester<K, V> {
     Stream.generate(unknownKeySupplier).limit(count)
         .forEach(key -> assertThat(adapter.get(key)).isNull());
 
-    Stream.generate(unknownKeySupplier).limit(count)
-        .forEach(key -> assertThat(adapter.delete(key)).isFalse());
+    Stream.generate(unknownKeySupplier).limit(count).forEach(key -> doDelete(null, false, key));
 
     map.keySet().forEach(key -> doDelete(null, true, key));
 
-    assertThat(adapter.size()).isEqualTo(0);
+    if (checkSize) {
+      assertThat(adapter.size()).isEqualTo(0);
+    }
   }
 
   public void testPutDeleteGet(int count, PutDeleteGet putDeleteGet, KnownKeyRate knownKeyRate) {
@@ -199,9 +208,13 @@ public class ReadWriteStorageTester<K, V> {
       if (map != null) {
         map.remove(key);
       }
-      a.isTrue();
+      if (checkDeleteReturnValue) {
+        a.isTrue();
+      }
     } else {
-      a.isFalse();
+      if (checkDeleteReturnValue) {
+        a.isFalse();
+      }
     }
   }
 
