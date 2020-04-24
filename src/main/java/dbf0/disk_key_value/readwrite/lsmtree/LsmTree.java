@@ -6,7 +6,7 @@ import com.google.common.collect.PeekingIterator;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.PositionTrackingStream;
-import dbf0.common.ReadTwoStepWriteLock;
+import dbf0.common.ReadWriteLockHelper;
 import dbf0.disk_key_value.io.FileOperations;
 import dbf0.disk_key_value.readonly.*;
 import dbf0.disk_key_value.readwrite.ReadWriteStorage;
@@ -32,8 +32,9 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
   private final FileOperations<T> baseFileOperations;
   private final FileOperations<T> baseIndexFileOperations;
 
-  private final ReadTwoStepWriteLock lock = new ReadTwoStepWriteLock();
-  private final Map<ByteArrayWrapper, ByteArrayWrapper> pendingWrites = new HashMap<>();
+  private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
+  private Map<ByteArrayWrapper, ByteArrayWrapper> pendingWrites = new HashMap<>();
+  private Map<ByteArrayWrapper, ByteArrayWrapper> writesInProgress = Collections.emptyMap();
   private int baseSize;
 
   private T journalOutputStream;
@@ -80,7 +81,7 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
 
   @Override public void put(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
     Preconditions.checkState(!mergingAborted.get());
-    lock.runWithWriteLocks(() -> {
+    lock.runWithWriteLock(() -> {
       pendingWrites.put(key, value);
       checkMergeThreshold(pendingWrites.size());
     });
@@ -93,27 +94,34 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
       if (value != null) {
         return value.equals(DELETE_VALUE) ? null : value;
       }
+      value = writesInProgress.get(key);
+      if (value != null) {
+        return value.equals(DELETE_VALUE) ? null : value;
+      }
       return baseReader == null ? null : baseReader.get(key);
     });
   }
 
   @Override public boolean delete(@NotNull ByteArrayWrapper key) throws IOException {
-    // We always need to know if it's in the base
     Preconditions.checkState(!mergingAborted.get());
-    lock.runWithWriteLocks(() -> {
+    lock.runWithWriteLock(() -> {
       pendingWrites.put(key, DELETE_VALUE);
       checkMergeThreshold(pendingWrites.size());
     });
     return true;// doesn't actually return a useful value
   }
 
-  private void checkMergeThreshold(int pendingWrites) throws IOException {
-    if (pendingWrites > pendingWritesMergeThreshold && baseMergeThread == null && !mergingAborted.get()) {
-      LOGGER.info("Starting base merging with " + pendingWrites + " pending writes");
-      var merger = new BaseMerger();
+  // only to be called when holding the write lock
+  private void checkMergeThreshold(int pendingWritesSize) throws IOException {
+    if (pendingWritesSize > pendingWritesMergeThreshold && baseMergeThread == null && !mergingAborted.get()) {
+      var merger = new BaseMerger(pendingWrites);
+      writesInProgress = Collections.unmodifiableMap(pendingWrites);
+      pendingWrites = new HashMap<>();
+      LOGGER.info("Starting base merging with " + pendingWritesSize + " pending writes");
       baseMergeThread = new Thread(() -> {
         try {
-          lock.runWithTwoStepWriteLocks(merger::writeNewMergedBase, merger::commit);
+          merger.writeNewMergedBase();
+          lock.runWithWriteLock(merger::commit);
         } catch (Exception e) {
           mergingAborted.set(true);
           LOGGER.log(Level.SEVERE, e, () -> "error in base merging. aborting");
@@ -127,6 +135,12 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
   }
 
   private class BaseMerger {
+
+    private final Map<ByteArrayWrapper, ByteArrayWrapper> writes;
+
+    public BaseMerger(Map<ByteArrayWrapper, ByteArrayWrapper> writes) {
+      this.writes = writes;
+    }
 
     private FileOperations.OverWriter<T> baseOverWriter;
     private FileOperations.OverWriter<T> indexOverWriter;
@@ -148,6 +162,36 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
       }
     }
 
+    private int mergePendingWritesWithBase(KeyValueFileReader baseReader, PositionTrackingStream outputStream,
+                                           IndexBuilder indexBuilder) throws IOException {
+      LOGGER.info("sorting pending write of size " + writes.size());
+      var sortedPendingIterator = writes.entrySet().stream().sorted(Map.Entry.comparingByKey())
+          .map(entry -> new SourceKV(KeyValueSource.PENDING, entry.getKey(), entry.getValue()))
+          .iterator();
+      var sortedBaseIterator = Iterators.transform(new KeyValueFileIterator(baseReader),
+          (kvPair) -> new SourceKV(KeyValueSource.BASE, kvPair.getKey(), kvPair.getValue()));
+      var mergeSortedIterator = Iterators.mergeSorted(List.of(sortedBaseIterator, sortedPendingIterator),
+          Comparator.comparing(SourceKV::getKey));
+      var selectedIterator = new PendingSelectorIterator(Iterators.peekingIterator(mergeSortedIterator));
+      int i = 0, count = 0;
+      LOGGER.info("writing new base");
+      var writer = new KeyValueFileWriter(outputStream);
+      while (selectedIterator.hasNext()) {
+        if (i % 1000 == 0) {
+          LOGGER.fine("writing merged entry " + i);
+        }
+        i++;
+        var entry = selectedIterator.next();
+        if (!entry.getValue().equals(DELETE_VALUE)) {
+          indexBuilder.accept(outputStream.getPosition(), entry.getKey());
+          writer.append(entry.getKey(), entry.getValue());
+          count++;
+        }
+      }
+      LOGGER.info("wrote " + count + " key/value pairs to new base");
+      return count;
+    }
+
     private void commit() throws IOException {
       LOGGER.info("Committing new merged base with " + newBaseSize + " entries");
       Preconditions.checkState(baseOverWriter != null);
@@ -155,7 +199,7 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
       baseOverWriter = null;
       indexOverWriter.commit();
       indexOverWriter = null;
-      pendingWrites.clear();
+      writesInProgress = Collections.emptyMap();
       baseSize = newBaseSize;
       baseReader = new RandomAccessKeyValueFileReader(baseFileOperations, RandomAccessKeyValueFileReader.readIndex(
           new KeyValueFileIterator(batchReader(baseIndexFileOperations))));
@@ -172,36 +216,6 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
 
   @NotNull private KeyValueFileReader batchReader(FileOperations<T> baseIndexFileOperations) throws IOException {
     return new KeyValueFileReader(new BufferedInputStream(baseIndexFileOperations.createInputStream(), BATCH_IO_BUFFER_SIZE));
-  }
-
-  private int mergePendingWritesWithBase(KeyValueFileReader baseReader, PositionTrackingStream outputStream,
-                                         IndexBuilder indexBuilder) throws IOException {
-    LOGGER.info("sorting pending write of size " + pendingWrites.size());
-    var sortedPendingIterator = pendingWrites.entrySet().stream().sorted(Map.Entry.comparingByKey())
-        .map(entry -> new SourceKV(KeyValueSource.PENDING, entry.getKey(), entry.getValue()))
-        .iterator();
-    var sortedBaseIterator = Iterators.transform(new KeyValueFileIterator(baseReader),
-        (kvPair) -> new SourceKV(KeyValueSource.BASE, kvPair.getKey(), kvPair.getValue()));
-    var mergeSortedIterator = Iterators.mergeSorted(List.of(sortedBaseIterator, sortedPendingIterator),
-        Comparator.comparing(SourceKV::getKey));
-    var selectedIterator = new PendingSelectorIterator(Iterators.peekingIterator(mergeSortedIterator));
-    int i = 0, count = 0;
-    LOGGER.info("writing new base");
-    var writer = new KeyValueFileWriter(outputStream);
-    while (selectedIterator.hasNext()) {
-      if (i % 1000 == 0) {
-        LOGGER.fine("writing merged entry " + i);
-      }
-      i++;
-      var entry = selectedIterator.next();
-      if (!entry.getValue().equals(DELETE_VALUE)) {
-        indexBuilder.accept(outputStream.getPosition(), entry.getKey());
-        writer.append(entry.getKey(), entry.getValue());
-        count++;
-      }
-    }
-    LOGGER.info("wrote " + count + " key/value pairs to new base");
-    return count;
   }
 
   private enum KeyValueSource {
