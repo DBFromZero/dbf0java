@@ -18,10 +18,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -153,10 +150,10 @@ public class Benchmark {
                                    Stats stats, AtomicInteger errors) {
     try {
       var random = new Random();
-      var keyTracker = new KeyTracker();
+      var keyTracker = new KeyTracker(random);
       Supplier<ByteArrayWrapper> getDelKeyGenerate = () -> {
         var known = (!keyTracker.isEmpty()) && random.nextDouble() < knownKeyRate;
-        return known ? keyTracker.select(random) : ByteArrayWrapper.random(random, keyLength);
+        return known ? keyTracker.select() : ByteArrayWrapper.random(random, keyLength);
       };
       while (!Thread.interrupted()) {
         var operation = putDeleteGet.select(random);
@@ -198,23 +195,35 @@ public class Benchmark {
     }
   }
 
+  // https://en.wikipedia.org/wiki/Reservoir_sampling
   private static class KeyTracker {
-    private final LinkedList<ByteArrayWrapper> keys = new LinkedList<>();
-    private final int maxKeys = 100;
+    private final List<ByteArrayWrapper> keys = new ArrayList<>();
+    private final int maxKeys = 10 * 1000;
+    private final Random random;
+    private int keysSeen = 0;
+
+    public KeyTracker(Random random) {
+      this.random = random;
+    }
 
     private boolean isEmpty() {
       return keys.isEmpty();
     }
 
     private void add(ByteArrayWrapper key) {
-      keys.add(key);
-      if (keys.size() == maxKeys) {
-        keys.removeFirst();
+      if (keys.size() <= maxKeys) {
+        keys.add(key);
+      } else {
+        int i = random.nextInt(keysSeen);
+        if (i < keys.size()) {
+          keys.set(i, key);
+        }
       }
+      keysSeen++;
     }
 
-    private ByteArrayWrapper select(Random r) {
-      return keys.stream().skip(r.nextInt(keys.size())).findFirst().get();
+    private ByteArrayWrapper select() {
+      return keys.get(random.nextInt(keys.size()));
     }
   }
 
