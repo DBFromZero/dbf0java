@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.logging.Logger;
 
-interface IndexBuilder {
+public interface IndexBuilder {
 
   Logger LOGGER = Dbf0Util.getLogger(IndexBuilder.class);
 

@@ -9,12 +9,12 @@ import org.apache.commons.lang3.tuple.Pair;
 import javax.annotation.Nullable;
 import java.io.*;
 
-class KeyValueFileReader implements Closeable {
+public class KeyValueFileReader implements Closeable {
 
   private transient InputStream inputStream;
   private boolean haveReadKey = false;
 
-  KeyValueFileReader(InputStream inputStream) {
+  public KeyValueFileReader(InputStream inputStream) {
     this.inputStream = inputStream;
   }
 

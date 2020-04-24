@@ -14,12 +14,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
-class RandomAccessKeyValueFileReader {
+public class RandomAccessKeyValueFileReader {
 
   private final ReadOnlyFileOperations fileOperations;
   private final TreeMap<ByteArrayWrapper, Long> index;
 
-  RandomAccessKeyValueFileReader(ReadOnlyFileOperations fileOperations, TreeMap<ByteArrayWrapper, Long> index) {
+  public RandomAccessKeyValueFileReader(ReadOnlyFileOperations fileOperations, TreeMap<ByteArrayWrapper, Long> index) {
     this.fileOperations = fileOperations;
     this.index = index;
   }
@@ -28,8 +28,11 @@ class RandomAccessKeyValueFileReader {
     this(new ReadOnlyFileOperationsImpl(new File(path)), index);
   }
 
-  static TreeMap<ByteArrayWrapper, Long> readIndex(String path) throws IOException {
-    var iterator = new KeyValueFileIterator(new KeyValueFileReader(path));
+  public static TreeMap<ByteArrayWrapper, Long> readIndex(String path) throws IOException {
+    return readIndex(new KeyValueFileIterator(new KeyValueFileReader(path)));
+  }
+
+  public static TreeMap<ByteArrayWrapper, Long> readIndex(KeyValueFileIterator iterator) throws IOException {
     var index = new TreeMap<ByteArrayWrapper, Long>();
     Dbf0Util.iteratorStream(iterator).forEach(
         entry -> index.put(entry.getKey(), ByteBuffer.wrap(entry.getValue().getArray()).getLong()));
@@ -68,7 +71,7 @@ class RandomAccessKeyValueFileReader {
   }
 
   @Nullable
-  ByteArrayWrapper get(ByteArrayWrapper key) throws IOException {
+  public ByteArrayWrapper get(ByteArrayWrapper key) throws IOException {
     // specifically don't use buffered IO cause we hopefully won't have to read much
     // and we also get to use KeyValueFileReader.skipValue to avoid large segments of data
     // might be worth benchmarking the effect of buffered IO?
