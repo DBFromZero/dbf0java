@@ -29,7 +29,7 @@ public class Dbf0Util {
   public static void enableConsoleLogging(Level level, boolean singleLine) {
     if (singleLine) {
       System.setProperty("java.util.logging.SimpleFormatter.format",
-          "%1$tl:%1$tM:%1$tS %1$Tp %4$-6s %2$-60s %5$s%6$s%n");
+          "%1$tH:%1$tM:%1$tS.%1$tL %4$-6s %2$-60s %5$s%6$s%n");
     }
     var rootLogger = LogManager.getLogManager().getLogger("");
     var handler = new ConsoleHandler();
