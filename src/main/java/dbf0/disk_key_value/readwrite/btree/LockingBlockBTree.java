@@ -82,11 +82,15 @@ public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V
     return lock.callWithReadLock(() -> tree.streamIdsInUse().collect(Collectors.toList()).stream());
   }
 
-  private void vacuumCheck() {
-    if (vacuumThread == null && vacuumChecker.vacuumNeeded()) {
+  private void vacuumCheck() throws IOException {
+    if (vacuumThread == null && lock.callWithReadLock(vacuumChecker::vacuumNeeded)) {
       LOGGER.fine("Starting vacuum thread");
-      vacuumThread = new Thread(new VacuumRunnable(storage.vacuum()));
-      vacuumThread.start();
+      lock.runWithWriteLocks(() -> {
+        if (vacuumThread == null) {
+          vacuumThread = new Thread(new VacuumRunnable(storage.vacuum()));
+          vacuumThread.start();
+        }
+      });
     }
   }
 
