@@ -9,7 +9,7 @@ import dbf0.common.PositionTrackingStream;
 import dbf0.common.ReadWriteLockHelper;
 import dbf0.disk_key_value.io.FileOperations;
 import dbf0.disk_key_value.readonly.*;
-import dbf0.disk_key_value.readwrite.ReadWriteStorage;
+import dbf0.disk_key_value.readwrite.CloseableReadWriteStorage;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper>, Closeable {
+public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(LsmTree.class);
   private static final int BATCH_IO_BUFFER_SIZE = 0x4000;
@@ -37,7 +37,6 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
   private Map<ByteArrayWrapper, ByteArrayWrapper> writesInProgress = Collections.emptyMap();
   private int baseSize;
 
-  private T journalOutputStream;
   private RandomAccessKeyValueFileReader baseReader;
   private Thread baseMergeThread;
   private final AtomicBoolean mergingAborted = new AtomicBoolean(false);
@@ -56,13 +55,9 @@ public class LsmTree<T extends OutputStream> implements ReadWriteStorage<ByteArr
   }
 
   public void initialize() throws IOException {
-    Preconditions.checkState(journalOutputStream == null, "already initialized");
   }
 
   @Override public void close() throws IOException {
-    Preconditions.checkState(journalOutputStream != null, "not yet initialized");
-    journalOutputStream.close();
-    journalOutputStream = null;
     if (baseMergeThread != null) {
       try {
         baseMergeThread.interrupt();

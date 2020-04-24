@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,7 +45,7 @@ public class Benchmark {
     var duration = Duration.parse(argsItr.next());
     var type = argsItr.next();
 
-    ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage;
+    CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage;
     switch (type) {
       case "btree":
         storage = createBTree(argsItr, file);
@@ -69,12 +70,14 @@ public class Benchmark {
     for (var thread : threads) {
       thread.join();
     }
+    storage.close();
 
     if (errors.get() > 0) {
       LOGGER.warning("Errors were encountered. Not reporting results.");
       System.exit(1);
     }
 
+    stats.fileSize.set(file.length());
     System.out.println(stats.toJson());
   }
 
@@ -85,9 +88,10 @@ public class Benchmark {
         if (errors.get() == 0) {
           Thread.sleep(sleepInterval);
         }
+        stats.fileSize.set(file.length());
         LOGGER.info(String.format("time=%.1fs size=%s intermediate stats %s",
             (double) (index * sleepInterval) / 1000,
-            Dbf0Util.formatBytes(file.length()),
+            Dbf0Util.formatBytes(stats.fileSize.get()),
             stats.toJson()));
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
@@ -228,19 +232,21 @@ public class Benchmark {
   }
 
   private static class Stats {
-    private final AtomicInteger countPut = new AtomicInteger(0);
-    private final AtomicInteger countDelete = new AtomicInteger(0);
-    private final AtomicInteger countDeleteFound = new AtomicInteger(0);
-    private final AtomicInteger countGet = new AtomicInteger(0);
-    private final AtomicInteger countFound = new AtomicInteger(0);
+    private final AtomicLong countPut = new AtomicLong(0);
+    private final AtomicLong countDelete = new AtomicLong(0);
+    private final AtomicLong countDeleteFound = new AtomicLong(0);
+    private final AtomicLong countGet = new AtomicLong(0);
+    private final AtomicLong countFound = new AtomicLong(0);
+    private final AtomicLong fileSize = new AtomicLong(0);
 
-    private ImmutableMap<String, Integer> getMap() {
-      return ImmutableMap.<String, Integer>builder()
+    private ImmutableMap<String, Long> getMap() {
+      return ImmutableMap.<String, Long>builder()
           .put("put", countPut.get())
           .put("delete", countDelete.get())
           .put("deleteFound", countDeleteFound.get())
           .put("get", countGet.get())
           .put("getFound", countFound.get())
+          .put("fileSize", fileSize.get())
           .build();
     }
 

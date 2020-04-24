@@ -2,18 +2,18 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import dbf0.common.Dbf0Util;
 import dbf0.common.ReadTwoStepWriteLock;
+import dbf0.disk_key_value.readwrite.CloseableReadWriteStorage;
 import dbf0.disk_key_value.readwrite.blocks.VacuumChecker;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
-import java.io.Closeable;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V>, Closeable {
+public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V>, CloseableReadWriteStorage<K, V> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(LockingBlockBTree.class);
 
