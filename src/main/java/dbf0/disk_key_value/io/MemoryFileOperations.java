@@ -2,6 +2,7 @@
 package dbf0.disk_key_value.io;
 
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 
@@ -12,13 +13,28 @@ import java.io.*;
  */
 public class MemoryFileOperations implements FileOperations<MemoryFileOperations.MemoryOutputStream> {
 
+  private final String name;
   private MemoryOutputStream currentOutput;
 
   public MemoryFileOperations() {
+    this.name = "<unnamed>";
   }
 
   public MemoryFileOperations(ByteArrayWrapper initialValue) throws IOException {
+    this();
     createAppendOutputStream().write(initialValue.getArray());
+  }
+
+  public MemoryFileOperations(String name) {
+    this.name = name;
+  }
+
+  @Override public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("name", name)
+        .add("exists", exists())
+        .add("length", exists() ? length() : -1)
+        .toString();
   }
 
   @Override public MemoryOutputStream createAppendOutputStream() {
@@ -31,11 +47,18 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
   @Override public void sync(MemoryOutputStream outputStream) {
   }
 
+  @Override public void delete() throws IOException {
+    if (currentOutput != null) {
+      throw new IOException("memory file does not exist");
+    }
+    currentOutput = null;
+  }
+
   @Override public OverWriter<MemoryOutputStream> createOverWriter() throws IOException {
     return new MemoryOverWriter();
   }
 
-  @Override public boolean exists() throws IOException {
+  @Override public boolean exists() {
     return currentOutput != null;
   }
 
@@ -46,7 +69,7 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
     return currentOutput.createView();
   }
 
-  public int size() {
+  @Override public long length() {
     return currentOutput == null ? 0 : currentOutput.size();
   }
 
@@ -60,7 +83,7 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
     }
   }
 
-  private class MemoryOverWriter implements OverWriter<MemoryOutputStream> {
+  class MemoryOverWriter implements OverWriter<MemoryOutputStream> {
 
     MemoryOutputStream outputStream = new MemoryOutputStream();
 

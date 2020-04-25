@@ -5,12 +5,15 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
+import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
 import dbf0.disk_key_value.io.FileOperationsImpl;
 import dbf0.disk_key_value.io.SerializationHelper;
 import dbf0.disk_key_value.io.SerializationPair;
 import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.FileMetadataStorage;
 import dbf0.disk_key_value.readwrite.btree.*;
+import dbf0.disk_key_value.readwrite.lsmtree.BaseDeltaFiles;
+import dbf0.disk_key_value.readwrite.lsmtree.DeltaWriterCoordinator;
 import dbf0.disk_key_value.readwrite.lsmtree.InterruptedExceptionWrapper;
 import dbf0.disk_key_value.readwrite.lsmtree.LsmTree;
 import dbf0.test.PutDeleteGet;
@@ -89,7 +92,7 @@ public class Benchmark {
         if (errors.get() == 0) {
           Thread.sleep(sleepInterval);
         }
-        stats.fileSize.set(file.length());
+        stats.fileSize.set(fileSize(file));
         LOGGER.info(String.format("time=%.1fs size=%s intermediate stats %s",
             (double) (index * sleepInterval) / 1000,
             Dbf0Util.formatBytes(stats.fileSize.get()),
@@ -98,6 +101,14 @@ public class Benchmark {
         throw new RuntimeException(e);
       }
     });
+  }
+
+  private static long fileSize(File f) {
+    if (f.isFile()) {
+      return f.length();
+    }
+    Preconditions.checkState(f.isDirectory());
+    return Arrays.stream(f.listFiles()).mapToLong(Benchmark::fileSize).sum();
   }
 
   private static LockingBlockBTree<ByteArrayWrapper, ByteArrayWrapper> createBTree(Iterator<String> argsItr, File file)
@@ -134,20 +145,25 @@ public class Benchmark {
     return btree;
   }
 
-  private static LsmTree<FileOutputStream> createLsmTree(Iterator<String> argsItr, File baseFile) {
+  private static LsmTree<FileOutputStream> createLsmTree(Iterator<String> argsItr, File directory) throws IOException {
     var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
     var baseIndexRate = Integer.parseInt(argsItr.next());
 
-    var indexFile = new File(baseFile.getPath() + "-index");
-    deleteFile(baseFile);
-    deleteFile(indexFile);
-
-    return new LsmTree<>(
+    var directoryOps = new FileDirectoryOperationsImpl(directory);
+    directoryOps.mkdirs();
+    directoryOps.clear();
+    var baseDeltaFiles = new BaseDeltaFiles<>(directoryOps);
+    var tree = new LsmTree<>(
         pendingWritesMergeThreshold,
-        baseIndexRate,
-        new FileOperationsImpl(baseFile, "-tmp"),
-        new FileOperationsImpl(indexFile, "-tmp")
+        baseDeltaFiles,
+        new DeltaWriterCoordinator<>(
+            baseDeltaFiles,
+            baseIndexRate,
+            20
+        )
     );
+    tree.initialize();
+    return tree;
   }
 
   public static void runOperations(int keyLength, int valueLength, PutDeleteGet putDeleteGet, double knownKeyRate,

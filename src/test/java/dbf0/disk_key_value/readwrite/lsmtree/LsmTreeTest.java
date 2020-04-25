@@ -2,7 +2,9 @@ package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.google.common.collect.Streams;
 import dbf0.common.Dbf0Util;
+import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
 import dbf0.disk_key_value.io.MemoryFileOperations;
+import dbf0.disk_key_value.io.ReadOnlyFileOperations;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
 import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
@@ -12,6 +14,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -27,10 +30,10 @@ public class LsmTreeTest {
   private static final Logger LOGGER = Dbf0Util.getLogger(LsmTreeTest.class);
 
   @Before public void setUp() throws Exception {
-    Dbf0Util.enableConsoleLogging(Level.INFO, true);
+    Dbf0Util.enableConsoleLogging(Level.FINER, true);
   }
 
-  @Test public void testSingleThreaded() {
+  @Test public void testSingleThreaded() throws IOException {
     var create = createTree(1000);
     var operations = create.getLeft();
     var tree = create.getRight();
@@ -41,7 +44,7 @@ public class LsmTreeTest {
     var count = new AtomicInteger(0);
     builder.iterationCallback((ignored) -> {
       if (count.incrementAndGet() % 1000 == 0) {
-        LOGGER.info("iteration " + count.get() + " size " + Dbf0Util.formatBytes(operations.size()));
+        LOGGER.info("iteration " + count.get() + " size " + Dbf0Util.formatBytes(getDirectorySize(operations)));
       }
     });
     var tester = builder.build();
@@ -49,14 +52,25 @@ public class LsmTreeTest {
   }
 
   @NotNull
-  public Pair<MemoryFileOperations, LsmTree<MemoryFileOperations.MemoryOutputStream>> createTree(int mergedThreshold) {
-    var baseFileOperations = new MemoryFileOperations();
-    return Pair.of(baseFileOperations, new LsmTree<>(
+  public Pair<MemoryFileDirectoryOperations, LsmTree<MemoryFileOperations.MemoryOutputStream>> createTree(int mergedThreshold) throws IOException {
+    var directoryOperations = new MemoryFileDirectoryOperations();
+    var baseDeltaFiles = new BaseDeltaFiles<>(directoryOperations);
+    var tree = new LsmTree<MemoryFileOperations.MemoryOutputStream>(
         mergedThreshold,
-        10,
-        baseFileOperations,
-        new MemoryFileOperations()
-    ));
+        baseDeltaFiles,
+        new DeltaWriterCoordinator<>(
+            baseDeltaFiles,
+            10,
+            10
+        )
+    );
+    tree.initialize();
+    return Pair.of(directoryOperations, tree);
+  }
+
+
+  private long getDirectorySize(MemoryFileDirectoryOperations d) throws IOException {
+    return d.list().stream().map(d::file).mapToLong(ReadOnlyFileOperations::length).sum();
   }
 
   @Test public void testMultiThread() throws Exception {
@@ -80,7 +94,7 @@ public class LsmTreeTest {
 
   private Thread createThread(LsmTree<?> tree,
                               PutDeleteGet putDeleteGet, KnownKeyRate knownKeyRate,
-                              boolean callback, AtomicInteger errors, MemoryFileOperations operations) {
+                              boolean callback, AtomicInteger errors, MemoryFileDirectoryOperations operations) {
     var builder = ReadWriteStorageTester.builderForBytes(tree, new Random(), 16, 4096)
         .debug(false)
         .checkSize(false)
@@ -90,7 +104,7 @@ public class LsmTreeTest {
       builder.iterationCallback((ignored) -> {
         assertThat(errors.get()).isZero();
         if (count.incrementAndGet() % 1000 == 0) {
-          LOGGER.info("iteration " + count.get() + " size " + Dbf0Util.formatBytes(operations.size()));
+          LOGGER.info("iteration " + count.get() + " size " + Dbf0Util.formatBytes(getDirectorySize(operations)));
         }
       });
     } else {

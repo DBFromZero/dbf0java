@@ -9,6 +9,8 @@ public interface FileOperations<T extends OutputStream> extends ReadOnlyFileOper
 
   void sync(T outputStream) throws IOException;
 
+  void delete() throws IOException;
+
   OverWriter<T> createOverWriter() throws IOException;
 
   interface OverWriter<T extends OutputStream> {

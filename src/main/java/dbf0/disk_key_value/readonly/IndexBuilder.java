@@ -37,7 +37,7 @@ public interface IndexBuilder {
 
     @Override public void accept(long position, ByteArrayWrapper key) throws IOException {
       if (keyCount % indexRate == 0) {
-        LOGGER.fine(() -> "writing index at " + keyCount);
+        LOGGER.finest(() -> "writing index at " + keyCount);
         indexStorage.append(key, ByteArrayWrapper.of(ByteBuffer.allocate(8).putLong(position).array()));
       }
       keyCount++;

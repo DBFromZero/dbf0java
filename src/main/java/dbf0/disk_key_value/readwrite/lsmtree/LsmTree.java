@@ -1,84 +1,59 @@
 package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.PeekingIterator;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.PositionTrackingStream;
 import dbf0.common.ReadWriteLockHelper;
-import dbf0.disk_key_value.io.FileOperations;
-import dbf0.disk_key_value.readonly.*;
 import dbf0.disk_key_value.readwrite.CloseableReadWriteStorage;
-import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
-import java.io.*;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 
 public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(LsmTree.class);
-  private static final int BATCH_IO_BUFFER_SIZE = 0x4000;
-  private static final ByteArrayWrapper DELETE_VALUE = ByteArrayWrapper.of(
+  static final ByteArrayWrapper DELETE_VALUE = ByteArrayWrapper.of(
       83, 76, 69, 7, 95, 21, 81, 27, 2, 104, 8, 100, 45, 109, 110, 1);
 
   private final int pendingWritesMergeThreshold;
-  private final int baseIndexRate;
-  private final FileOperations<T> baseFileOperations;
-  private final FileOperations<T> baseIndexFileOperations;
+  private final BaseDeltaFiles<T> baseDeltaFiles;
+  private final DeltaWriterCoordinator<T> coordinator;
 
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
   private Map<ByteArrayWrapper, ByteArrayWrapper> pendingWrites = new HashMap<>();
-  private Map<ByteArrayWrapper, ByteArrayWrapper> writesInProgress = Collections.emptyMap();
-  private int baseSize;
-
-  private RandomAccessKeyValueFileReader baseReader;
-  private Thread baseMergeThread;
-  private final AtomicBoolean mergingAborted = new AtomicBoolean(false);
-
 
   public LsmTree(int pendingWritesMergeThreshold,
-                 int baseIndexRate,
-                 FileOperations<T> baseFileOperations,
-                 FileOperations<T> baseIndexFileOperations) {
+                 BaseDeltaFiles<T> baseDeltaFiles,
+                 DeltaWriterCoordinator<T> coordinator) {
     Preconditions.checkArgument(pendingWritesMergeThreshold > 0);
-    Preconditions.checkArgument(baseIndexRate > 0);
     this.pendingWritesMergeThreshold = pendingWritesMergeThreshold;
-    this.baseIndexRate = baseIndexRate;
-    this.baseFileOperations = baseFileOperations;
-    this.baseIndexFileOperations = baseIndexFileOperations;
+    this.baseDeltaFiles = baseDeltaFiles;
+    this.coordinator = coordinator;
   }
 
   public void initialize() throws IOException {
+    coordinator.initialize();
   }
 
   @Override public void close() throws IOException {
-    if (baseMergeThread != null) {
-      try {
-        baseMergeThread.interrupt();
-        baseMergeThread.join();
-        baseMergeThread = null;
-      } catch (InterruptedException e) {
-        throw new RuntimeException("interrupted in closing vacuum thread");
-      }
-    }
+    coordinator.shutdown();
   }
 
   @Override public int size() throws IOException {
-    Preconditions.checkState(!mergingAborted.get());
     throw new RuntimeException("not implemented");
   }
 
   @Override public void put(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
-    Preconditions.checkState(!mergingAborted.get());
+    Preconditions.checkState(coordinator.noWritesAborted());
     var writesBlocked = lock.callWithWriteLock(() -> {
       pendingWrites.put(key, value);
-      return checkMergeThreshold(pendingWrites.size());
+      return checkMergeThreshold();
     });
     if (writesBlocked) {
       waitForWritesToUnblock();
@@ -86,25 +61,25 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
   }
 
   @Nullable @Override public ByteArrayWrapper get(@NotNull ByteArrayWrapper key) throws IOException {
-    Preconditions.checkState(!mergingAborted.get());
-    return lock.callWithReadLock(() -> {
+    Preconditions.checkState(coordinator.noWritesAborted());
+    var outerValue = lock.callWithReadLock(() -> {
       var value = pendingWrites.get(key);
       if (value != null) {
-        return value.equals(DELETE_VALUE) ? null : value;
+        return value;
       }
-      value = writesInProgress.get(key);
-      if (value != null) {
-        return value.equals(DELETE_VALUE) ? null : value;
-      }
-      return baseReader == null ? null : baseReader.get(key);
+      return coordinator.searchForKeyInWritesInProgress(key);
     });
+    if (outerValue != null) {
+      return outerValue.equals(DELETE_VALUE) ? null : outerValue;
+    }
+    return baseDeltaFiles.hasInUseBase() ? baseDeltaFiles.searchForKey(key) : null;
   }
 
   @Override public boolean delete(@NotNull ByteArrayWrapper key) throws IOException {
-    Preconditions.checkState(!mergingAborted.get());
+    Preconditions.checkState(coordinator.noWritesAborted());
     var writesBlocked = lock.callWithWriteLock(() -> {
       pendingWrites.put(key, DELETE_VALUE);
-      return checkMergeThreshold(pendingWrites.size());
+      return checkMergeThreshold();
     });
     if (writesBlocked) {
       waitForWritesToUnblock();
@@ -113,45 +88,31 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
   }
 
   // only to be called when holding the write lock
-  private boolean checkMergeThreshold(int pendingWritesSize) throws IOException {
-    if (pendingWritesSize < pendingWritesMergeThreshold) {
+  private boolean checkMergeThreshold() throws IOException {
+    if (pendingWrites.size() < pendingWritesMergeThreshold) {
       return false;
     }
-    if (baseMergeThread == null && !mergingAborted.get()) {
-      var merger = new BaseMerger(pendingWrites);
-      writesInProgress = Collections.unmodifiableMap(pendingWrites);
-      pendingWrites = new HashMap<>();
-      LOGGER.info("Starting base merging with " + pendingWritesSize + " pending writes");
-      baseMergeThread = new Thread(() -> {
-        try {
-          merger.writeNewMergedBase();
-          lock.runWithWriteLock(merger::commit);
-        } catch (Exception e) {
-          mergingAborted.set(true);
-          LOGGER.log(Level.SEVERE, e, () -> "error in base merging. aborting");
-          merger.abort();
-        } finally {
-          baseMergeThread = null;
-        }
-      });
-      baseMergeThread.start();
-      return false;
+    if (coordinator.hasMaxInFlightWriters()) {
+      return true;
     }
-    return true;
+    coordinator.addWrites(Collections.unmodifiableMap(pendingWrites));
+    pendingWrites = new HashMap<>();
+    return false;
   }
 
   private void waitForWritesToUnblock() {
-    LOGGER.warning("We are already merging and have again hit write limit. Have to throttle writes");
+    LOGGER.warning("There are too many in-flight write jobs. Waiting for them to finish");
     try {
-      while (baseMergeThread != null) {
+      while (coordinator.hasMaxInFlightWriters()) {
         Thread.sleep(500);
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new InterruptedExceptionWrapper("interrupted waiting for base merging to finish");
+      throw new InterruptedExceptionWrapper("interrupted waiting for write jobs to finish");
     }
   }
 
+  /*
   private class BaseMerger {
 
     private final Map<ByteArrayWrapper, ByteArrayWrapper> writes;
@@ -293,4 +254,6 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
       }
     }
   }
+
+   */
 }

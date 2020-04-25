@@ -5,7 +5,9 @@ import java.io.InputStream;
 
 public interface ReadOnlyFileOperations {
 
-  boolean exists() throws IOException;
+  boolean exists();
+
+  long length();
 
   InputStream createInputStream() throws IOException;
 }

@@ -20,6 +20,13 @@ public class FileOperationsImpl extends ReadOnlyFileOperationsImpl implements Fi
     this.tempSuffix = Preconditions.checkNotNull(tempSuffix);
   }
 
+  @Override public void delete() throws IOException {
+    var deleted = file.delete();
+    if (!deleted) {
+      throw new IOException("Failed to delete " + file);
+    }
+  }
+
   @Override public FileOutputStream createAppendOutputStream() throws IOException {
     return new FileOutputStream(file, true);
   }
@@ -29,7 +36,7 @@ public class FileOperationsImpl extends ReadOnlyFileOperationsImpl implements Fi
   }
 
   @Override public OverWriter<FileOutputStream> createOverWriter() throws IOException {
-    var tempFile = new File(file.getPath() + "-vacuum");
+    var tempFile = new File(file.getPath() + tempSuffix);
     if (tempFile.exists()) {
       throw new IOException("temp path " + tempFile + " already exists");
     }

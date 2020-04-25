@@ -6,7 +6,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ReadWriteLockHelper {
 
-  private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock(true);
+  private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock(false);
 
   public interface IOCallable<T> {
     T call() throws IOException;

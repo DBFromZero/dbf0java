@@ -19,12 +19,16 @@ public class ReadOnlyFileOperationsImpl implements ReadOnlyFileOperations {
     this.file = Preconditions.checkNotNull(file);
   }
 
-  @Override public boolean exists() throws IOException {
+  @Override public boolean exists() {
     if (!file.exists()) {
       return false;
     }
     Preconditions.checkState(file.isFile(), "%s is not a file", file);
     return true;
+  }
+
+  @Override public long length() {
+    return file.length();
   }
 
   @Override public InputStream createInputStream() throws IOException {
