@@ -11,6 +11,7 @@ import dbf0.disk_key_value.io.SerializationPair;
 import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.FileMetadataStorage;
 import dbf0.disk_key_value.readwrite.btree.*;
+import dbf0.disk_key_value.readwrite.lsmtree.InterruptedExceptionWrapper;
 import dbf0.disk_key_value.readwrite.lsmtree.LsmTree;
 import dbf0.test.PutDeleteGet;
 
@@ -186,6 +187,9 @@ public class Benchmark {
             throw new RuntimeException("Unsupported operation " + operation);
         }
       }
+    } catch (InterruptedExceptionWrapper e) {
+      LOGGER.log(Level.WARNING, e, () ->
+          "interruption in store operations. assuming end of benchmark and exiting normally");
     } catch (Exception e) {
       errors.incrementAndGet();
       LOGGER.log(Level.SEVERE, e, () -> "failure in thread");

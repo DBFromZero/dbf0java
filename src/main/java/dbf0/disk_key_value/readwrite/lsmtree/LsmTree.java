@@ -76,10 +76,13 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
 
   @Override public void put(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
     Preconditions.checkState(!mergingAborted.get());
-    lock.runWithWriteLock(() -> {
+    var writesBlocked = lock.callWithWriteLock(() -> {
       pendingWrites.put(key, value);
-      checkMergeThreshold(pendingWrites.size());
+      return checkMergeThreshold(pendingWrites.size());
     });
+    if (writesBlocked) {
+      waitForWritesToUnblock();
+    }
   }
 
   @Nullable @Override public ByteArrayWrapper get(@NotNull ByteArrayWrapper key) throws IOException {
@@ -99,16 +102,22 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
 
   @Override public boolean delete(@NotNull ByteArrayWrapper key) throws IOException {
     Preconditions.checkState(!mergingAborted.get());
-    lock.runWithWriteLock(() -> {
+    var writesBlocked = lock.callWithWriteLock(() -> {
       pendingWrites.put(key, DELETE_VALUE);
-      checkMergeThreshold(pendingWrites.size());
+      return checkMergeThreshold(pendingWrites.size());
     });
+    if (writesBlocked) {
+      waitForWritesToUnblock();
+    }
     return true;// doesn't actually return a useful value
   }
 
   // only to be called when holding the write lock
-  private void checkMergeThreshold(int pendingWritesSize) throws IOException {
-    if (pendingWritesSize > pendingWritesMergeThreshold && baseMergeThread == null && !mergingAborted.get()) {
+  private boolean checkMergeThreshold(int pendingWritesSize) throws IOException {
+    if (pendingWritesSize < pendingWritesMergeThreshold) {
+      return false;
+    }
+    if (baseMergeThread == null && !mergingAborted.get()) {
       var merger = new BaseMerger(pendingWrites);
       writesInProgress = Collections.unmodifiableMap(pendingWrites);
       pendingWrites = new HashMap<>();
@@ -126,6 +135,20 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
         }
       });
       baseMergeThread.start();
+      return false;
+    }
+    return true;
+  }
+
+  private void waitForWritesToUnblock() {
+    LOGGER.warning("We are already merging and have again hit write limit. Have to throttle writes");
+    try {
+      while (baseMergeThread != null) {
+        Thread.sleep(500);
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new InterruptedExceptionWrapper("interrupted waiting for base merging to finish");
     }
   }
 
