@@ -48,8 +48,8 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
   }
 
   @Override public void delete() throws IOException {
-    if (currentOutput != null) {
-      throw new IOException("memory file does not exist");
+    if (currentOutput == null) {
+      throw new IOException("memory file " + name + " does not exist");
     }
     currentOutput = null;
   }
@@ -99,7 +99,6 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
     }
 
     @Override public void abort() {
-      Preconditions.checkState(outputStream != null);
       outputStream = null;
     }
   }

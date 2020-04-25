@@ -10,12 +10,13 @@ import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
 import dbf0.test.RandomSeed;
 import org.apache.commons.lang3.tuple.Pair;
-import org.jetbrains.annotations.NotNull;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Random;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -51,27 +52,6 @@ public class LsmTreeTest {
     tester.testPutDeleteGet(10 * 1000, PutDeleteGet.PUT_HEAVY, KnownKeyRate.MID);
   }
 
-  @NotNull
-  public Pair<MemoryFileDirectoryOperations, LsmTree<MemoryFileOperations.MemoryOutputStream>> createTree(int mergedThreshold) throws IOException {
-    var directoryOperations = new MemoryFileDirectoryOperations();
-    var baseDeltaFiles = new BaseDeltaFiles<>(directoryOperations);
-    var tree = new LsmTree<MemoryFileOperations.MemoryOutputStream>(
-        mergedThreshold,
-        baseDeltaFiles,
-        new DeltaWriterCoordinator<>(
-            baseDeltaFiles,
-            10,
-            10
-        )
-    );
-    tree.initialize();
-    return Pair.of(directoryOperations, tree);
-  }
-
-
-  private long getDirectorySize(MemoryFileDirectoryOperations d) throws IOException {
-    return d.list().stream().map(d::file).mapToLong(ReadOnlyFileOperations::length).sum();
-  }
 
   @Test public void testMultiThread() throws Exception {
     var create = createTree(10 * 1000);
@@ -90,6 +70,38 @@ public class LsmTreeTest {
       thread.join();
     }
     assertThat(errors.get()).isZero();
+  }
+
+  private Pair<MemoryFileDirectoryOperations, LsmTree<MemoryFileOperations.MemoryOutputStream>>
+  createTree(int mergedThreshold) throws IOException {
+    var directoryOperations = new MemoryFileDirectoryOperations();
+    var baseDeltaFiles = new BaseDeltaFiles<>(directoryOperations);
+    var executor = Executors.newScheduledThreadPool(4);
+    int indexRate = 10;
+    var tree = new LsmTree<MemoryFileOperations.MemoryOutputStream>(
+        mergedThreshold,
+        baseDeltaFiles,
+        new DeltaWriterCoordinator<>(
+            baseDeltaFiles,
+            indexRate,
+            10,
+            executor
+        ),
+        new BaseDeltaMergerCron<>(
+            baseDeltaFiles,
+            0.5,
+            Duration.ofMillis(250),
+            indexRate,
+            executor
+        )
+    );
+    tree.initialize();
+    return Pair.of(directoryOperations, tree);
+  }
+
+
+  private long getDirectorySize(MemoryFileDirectoryOperations d) throws IOException {
+    return d.list().stream().map(d::file).mapToLong(ReadOnlyFileOperations::length).sum();
   }
 
   private Thread createThread(LsmTree<?> tree,

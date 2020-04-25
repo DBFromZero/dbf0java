@@ -28,7 +28,6 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
   private final FileOperations<T> fileOperations;
   private final FileOperations<T> indexFileOperations;
   private final DeltaWriterCoordinator<T> coordinator;
-  private LsmBackgroundTaskState state = LsmBackgroundTaskState.PENDING;
 
   public WriteSortedEntriesJob(String name,
                                boolean isBase,
@@ -46,10 +45,6 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
     this.fileOperations = fileOperations;
     this.indexFileOperations = indexFileOperations;
     this.coordinator = coordinator;
-  }
-
-  public LsmBackgroundTaskState getState() {
-    return state;
   }
 
   public String getName() {
@@ -72,9 +67,8 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
   @Override public void run() {
     FileOperations.OverWriter<T> overWriter = null, indexOverWriter = null;
     try {
-      Preconditions.checkState(state == LsmBackgroundTaskState.PENDING);
       Preconditions.checkState(!fileOperations.exists());
-
+      Preconditions.checkState(!indexFileOperations.exists());
       LOGGER.info(() -> "Sorting " + writes.size() + " writes for " + name);
       var sortedEntries = new ArrayList<>(writes.entrySet());
       sortedEntries.sort(Map.Entry.comparingByKey());
@@ -94,16 +88,11 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
           }
         }
       }
-
-      LOGGER.info(() -> "Committing " + name);
-      state = LsmBackgroundTaskState.SUCCEEDED;
       overWriter.commit();
       indexOverWriter.commit();
       coordinator.commitWrites(this);
-
     } catch (Exception e) {
       LOGGER.log(Level.SEVERE, e, () -> "error in writing sorted file for " + name);
-      state = LsmBackgroundTaskState.FAILED;
       if (overWriter != null) {
         overWriter.abort();
       }

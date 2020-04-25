@@ -12,10 +12,7 @@ import dbf0.disk_key_value.io.SerializationPair;
 import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.FileMetadataStorage;
 import dbf0.disk_key_value.readwrite.btree.*;
-import dbf0.disk_key_value.readwrite.lsmtree.BaseDeltaFiles;
-import dbf0.disk_key_value.readwrite.lsmtree.DeltaWriterCoordinator;
-import dbf0.disk_key_value.readwrite.lsmtree.InterruptedExceptionWrapper;
-import dbf0.disk_key_value.readwrite.lsmtree.LsmTree;
+import dbf0.disk_key_value.readwrite.lsmtree.*;
 import dbf0.test.PutDeleteGet;
 
 import java.io.File;
@@ -23,6 +20,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -153,13 +151,22 @@ public class Benchmark {
     directoryOps.mkdirs();
     directoryOps.clear();
     var baseDeltaFiles = new BaseDeltaFiles<>(directoryOps);
+    var executor = Executors.newScheduledThreadPool(4);
     var tree = new LsmTree<>(
         pendingWritesMergeThreshold,
         baseDeltaFiles,
         new DeltaWriterCoordinator<>(
             baseDeltaFiles,
             baseIndexRate,
-            20
+            20,
+            executor
+        ),
+        new BaseDeltaMergerCron<>(
+            baseDeltaFiles,
+            0.75,
+            Duration.ofSeconds(1),
+            baseIndexRate,
+            executor
         )
     );
     tree.initialize();

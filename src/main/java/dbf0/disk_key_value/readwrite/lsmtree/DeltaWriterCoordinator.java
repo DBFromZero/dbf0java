@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -31,50 +30,33 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
   private final int indexRate;
 
   private final LinkedList<WriteSortedEntriesJob<T>> inFlightWriters = new LinkedList<>();
-  private ScheduledExecutorService executor;
+  private final ScheduledExecutorService executor;
   private int writersCreated = 0;
   private boolean anyWriteAborted = false;
   private State state = State.UNINITIALIZED;
 
-  public DeltaWriterCoordinator(BaseDeltaFiles<T> baseDeltaFiles, int indexRate, int maxInFlightWriters) {
+  public DeltaWriterCoordinator(BaseDeltaFiles<T> baseDeltaFiles, int indexRate, int maxInFlightWriters,
+                                ScheduledExecutorService executor) {
     Preconditions.checkArgument(indexRate > 0);
     Preconditions.checkArgument(maxInFlightWriters > 1);
     Preconditions.checkArgument(maxInFlightWriters < 100);
     this.baseDeltaFiles = Preconditions.checkNotNull(baseDeltaFiles);
     this.maxInFlightWriters = maxInFlightWriters;
     this.indexRate = indexRate;
+    this.executor = executor;
   }
 
-  void initialize() {
-    Preconditions.checkState(executor == null, "already initialized");
-    executor = Executors.newScheduledThreadPool(2);
-  }
 
-  void shutdown() {
-    Preconditions.checkState(executor != null, "not initialized");
-    executor.shutdown();
-    try {
-      executor.awaitTermination(10, TimeUnit.SECONDS);
-    } catch (InterruptedException e) {
-      throw new RuntimeException("Interrupted waiting for executor to shutdown");
-    }
-  }
-
-  synchronized boolean noWritesAborted() {
-    Preconditions.checkState(executor != null, "not initialized");
-    return !anyWriteAborted;
+  boolean anyWritesAborted() {
+    return anyWriteAborted;
   }
 
   synchronized boolean hasMaxInFlightWriters() {
-    Preconditions.checkState(executor != null, "not initialized");
     return inFlightWriters.size() == maxInFlightWriters;
   }
 
   synchronized void addWrites(Map<ByteArrayWrapper, ByteArrayWrapper> writes) {
-    Preconditions.checkState(executor != null, "not initialized");
     Preconditions.checkState(!hasMaxInFlightWriters());
-    Preconditions.checkState(!executor.isShutdown());
-
     if (state == State.UNINITIALIZED) {
       if (baseDeltaFiles.hasInUseBase()) {
         state = State.WRITE_DELTAS;
@@ -134,14 +116,12 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     }
     try {
       if (state == State.WRITING_BASE) {
-        LOGGER.info("Committing new base");
         Preconditions.checkState(writer.isBase());
-        baseDeltaFiles.resetBaseRandomReader();
+        baseDeltaFiles.setBase();
         state = State.WRITE_DELTAS;
       } else {
-        LOGGER.info("Committing delta " + writer.getDelta());
         Preconditions.checkState(state == State.WRITE_DELTAS);
-        baseDeltaFiles.addDelete(writer.getDelta());
+        baseDeltaFiles.addDelta(writer.getDelta());
       }
       var removed = inFlightWriters.remove(writer);
       Preconditions.checkState(removed);
