@@ -54,7 +54,7 @@ public class LsmTreeTest {
 
 
   @Test public void testMultiThread() throws Exception {
-    var create = createTree(10 * 1000);
+    var create = createTree(5 * 1000);
     var operations = create.getLeft();
     var tree = create.getRight();
     var errors = new AtomicInteger(0);
@@ -78,7 +78,7 @@ public class LsmTreeTest {
     var baseDeltaFiles = new BaseDeltaFiles<>(directoryOperations);
     var executor = Executors.newScheduledThreadPool(4);
     int indexRate = 10;
-    var tree = new LsmTree<MemoryFileOperations.MemoryOutputStream>(
+    var tree = new LsmTree<>(
         mergedThreshold,
         baseDeltaFiles,
         new DeltaWriterCoordinator<>(
@@ -125,7 +125,7 @@ public class LsmTreeTest {
     var tester = builder.build();
     return new Thread(() -> {
       try {
-        tester.testPutDeleteGet(50 * 1000, putDeleteGet, knownKeyRate);
+        tester.testPutDeleteGet(100 * 1000, putDeleteGet, knownKeyRate);
       } catch (Exception e) {
         LOGGER.log(Level.SEVERE, e, () -> "error in thread");
         errors.incrementAndGet();

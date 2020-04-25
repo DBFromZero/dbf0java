@@ -14,6 +14,7 @@ import dbf0.disk_key_value.readwrite.blocks.FileMetadataStorage;
 import dbf0.disk_key_value.readwrite.btree.*;
 import dbf0.disk_key_value.readwrite.lsmtree.*;
 import dbf0.test.PutDeleteGet;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -35,11 +36,11 @@ public class Benchmark {
 
   public static void main(String[] args) throws Exception {
     Preconditions.checkArgument(args.length >= 9);
-    Dbf0Util.enableConsoleLogging(Level.INFO, true);
+    Dbf0Util.enableConsoleLogging(Level.FINE, true);
 
     var argsItr = Arrays.asList(args).iterator();
     var file = new File(argsItr.next());
-    var keyLength = Integer.parseInt(argsItr.next());
+    var keySpaceSize = Integer.parseInt(argsItr.next());
     var valueLength = Integer.parseInt(argsItr.next());
     var putDeleteGet = PutDeleteGet.valueOf(argsItr.next());
     var knownKeyRate = Double.parseDouble(argsItr.next());
@@ -63,7 +64,7 @@ public class Benchmark {
     var stats = new Stats();
     var errors = new AtomicInteger(0);
     var threads = IntStream.range(0, threadCount).mapToObj(i ->
-        new Thread(() -> runOperations(keyLength, valueLength, putDeleteGet, knownKeyRate, storage, stats, errors)))
+        new Thread(() -> runOperations(keySpaceSize, valueLength, putDeleteGet, knownKeyRate, storage, stats, errors)))
         .collect(Collectors.toList());
     threads.forEach(Thread::start);
 
@@ -102,11 +103,15 @@ public class Benchmark {
   }
 
   private static long fileSize(File f) {
-    if (f.isFile()) {
-      return f.length();
+    try {
+      if (f.isFile()) {
+        return f.length();
+      }
+      Preconditions.checkState(f.isDirectory());
+      return Arrays.stream(f.listFiles()).mapToLong(Benchmark::fileSize).sum();
+    } catch (Exception ignored) {
+      return 0;
     }
-    Preconditions.checkState(f.isDirectory());
-    return Arrays.stream(f.listFiles()).mapToLong(Benchmark::fileSize).sum();
   }
 
   private static LockingBlockBTree<ByteArrayWrapper, ByteArrayWrapper> createBTree(Iterator<String> argsItr, File file)
@@ -173,21 +178,21 @@ public class Benchmark {
     return tree;
   }
 
-  public static void runOperations(int keyLength, int valueLength, PutDeleteGet putDeleteGet, double knownKeyRate,
-                                   ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage,
-                                   Stats stats, AtomicInteger errors) {
+  private static void runOperations(int keySpaceSize, int valueLength, PutDeleteGet putDeleteGet, double knownKeyRate,
+                                    ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage,
+                                    Stats stats, AtomicInteger errors) {
     try {
       var random = new Random();
       var keyTracker = new KeyTracker(random);
       Supplier<ByteArrayWrapper> getDelKeyGenerate = () -> {
         var known = (!keyTracker.isEmpty()) && random.nextDouble() < knownKeyRate;
-        return known ? keyTracker.select() : ByteArrayWrapper.random(random, keyLength);
+        return known ? keyTracker.select() : randomKey(random, keySpaceSize);
       };
       while (!Thread.interrupted()) {
         var operation = putDeleteGet.select(random);
         switch (operation) {
           case PUT:
-            var key = ByteArrayWrapper.random(random, keyLength);
+            var key = randomKey(random, keySpaceSize);
             storage.put(key, ByteArrayWrapper.random(random, valueLength));
             keyTracker.add(key);
             stats.countPut.incrementAndGet();
@@ -219,7 +224,13 @@ public class Benchmark {
     }
   }
 
-  public static void deleteFile(File file) {
+  private static ByteArrayWrapper randomKey(Random random, int keySpaceSize) {
+    var s = StringUtils.leftPad(String.valueOf(random.nextInt(keySpaceSize)),
+        String.valueOf(keySpaceSize).length(), "0");
+    return ByteArrayWrapper.of(s.getBytes());
+  }
+
+  private static void deleteFile(File file) {
     if (file.exists()) {
       var deleted = file.delete();
       Preconditions.checkState(deleted);

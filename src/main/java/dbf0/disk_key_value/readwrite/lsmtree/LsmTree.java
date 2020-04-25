@@ -94,7 +94,11 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
     if (outerValue != null) {
       return outerValue.equals(DELETE_VALUE) ? null : outerValue;
     }
-    return baseDeltaFiles.hasInUseBase() ? baseDeltaFiles.searchForKey(key) : null;
+    if (!baseDeltaFiles.hasInUseBase()) {
+      return null;
+    }
+    var value = baseDeltaFiles.searchForKey(key);
+    return value == null || value.equals(DELETE_VALUE) ? null : value;
   }
 
   @Override public boolean delete(@NotNull ByteArrayWrapper key) throws IOException {

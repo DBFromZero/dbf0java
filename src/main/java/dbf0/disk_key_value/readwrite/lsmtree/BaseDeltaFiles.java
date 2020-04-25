@@ -112,6 +112,7 @@ public class BaseDeltaFiles<T extends OutputStream> {
 
   void commitNewBase(FileOperations.OverWriter<T> baseOverWriter,
                      FileOperations.OverWriter<T> baseIndexOverWriter) throws IOException {
+    LOGGER.info("Committing new base");
     Preconditions.checkState(hasInUseBase());
     // this operation can take a non-trivial amount of time since we have to read the index
     // ideally we could load the index from temp file or key it in memory while writing, but
@@ -125,6 +126,7 @@ public class BaseDeltaFiles<T extends OutputStream> {
   }
 
   public void deleteDelta(Integer delta) throws IOException {
+    LOGGER.info("Deleting delta " + delta);
     ReaderWrapper wrapper;
     synchronized (this) {
       wrapper = orderedInUseDeltas.remove(delta);

@@ -1,5 +1,6 @@
 package dbf0.disk_key_value.io;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import dbf0.common.Dbf0Util;
 
@@ -33,5 +34,11 @@ public class ReadOnlyFileOperationsImpl implements ReadOnlyFileOperations {
 
   @Override public InputStream createInputStream() throws IOException {
     return new FileInputStream(file);
+  }
+
+  @Override public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("file", file)
+        .toString();
   }
 }

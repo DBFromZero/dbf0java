@@ -3,7 +3,6 @@ package dbf0.disk_key_value.readwrite.lsmtree;
 import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
 import com.google.common.collect.PeekingIterator;
 import com.google.common.collect.Streams;
 import dbf0.common.ByteArrayWrapper;
@@ -128,7 +127,7 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     List<Pair<Integer, FileOperations<T>>> deltaOpsForMerge = new ArrayList<>();
     long sumDeltaSize = 0;
     // start with the oldest deltas first and it is important to maintain order
-    for (var delta : Lists.reverse(orderedDeltasInUse)) {
+    for (var delta : orderedDeltasInUse) {
       var deltaOps = baseDeltaFiles.getDeltaOperations(delta);
       var deltaSize = deltaOps.length();
       LOGGER.fine(() -> "Considering delta " + delta + " size " + Dbf0Util.formatBytes(deltaSize));
@@ -140,7 +139,7 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
         LOGGER.warning("Merging base with just the oldest delta would exceed configured threshold. Merging anyways");
       }
       deltaOpsForMerge.add(Pair.of(delta, deltaOps));
-      maxDeltaSize = sumWithAddingDelta;
+      sumDeltaSize = sumWithAddingDelta;
     }
     return deltaOpsForMerge;
   }
@@ -208,7 +207,7 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     var writer = new KeyValueFileWriter(outputStream);
     while (selectedIterator.hasNext()) {
       if (i % 10000 == 0) {
-        LOGGER.fine("writing merged entry " + i);
+        LOGGER.finer("writing merged entry " + i);
       }
       i++;
       var entry = selectedIterator.next();
