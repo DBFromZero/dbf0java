@@ -12,7 +12,8 @@ import dbf0.disk_key_value.io.SerializationPair;
 import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.FileMetadataStorage;
 import dbf0.disk_key_value.readwrite.btree.*;
-import dbf0.disk_key_value.readwrite.lsmtree.*;
+import dbf0.disk_key_value.readwrite.lsmtree.InterruptedExceptionWrapper;
+import dbf0.disk_key_value.readwrite.lsmtree.LsmTree;
 import dbf0.test.PutDeleteGet;
 import org.apache.commons.lang3.StringUtils;
 
@@ -21,7 +22,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -48,18 +48,7 @@ public class Benchmark {
     var duration = Duration.parse(argsItr.next());
     var type = argsItr.next();
 
-    CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage;
-    switch (type) {
-      case "btree":
-        storage = createBTree(argsItr, file);
-        break;
-      case "lsm":
-        storage = createLsmTree(argsItr, file);
-        break;
-      default:
-        throw new IllegalArgumentException("Bad storage type: " + type);
-    }
-    Preconditions.checkState(!argsItr.hasNext());
+    var storage = createStorage(argsItr, file, type);
 
     var stats = new Stats();
     var errors = new AtomicInteger(0);
@@ -88,7 +77,24 @@ public class Benchmark {
     }
   }
 
-  private static void waitDuration(Duration duration, Stats stats, AtomicInteger errors, File file) {
+  static CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> createStorage(
+      Iterator<String> argsItr, File file, String type) throws IOException {
+    CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage;
+    switch (type) {
+      case "btree":
+        storage = createBTree(argsItr, file);
+        break;
+      case "lsm":
+        storage = createLsmTree(argsItr, file);
+        break;
+      default:
+        throw new IllegalArgumentException("Bad storage type: " + type);
+    }
+    Preconditions.checkState(!argsItr.hasNext());
+    return storage;
+  }
+
+  static void waitDuration(Duration duration, Stats stats, AtomicInteger errors, File file) {
     var sleepInterval = 1000L;
     IntStream.range(0, (int) (duration.toMillis() / sleepInterval)).forEach(index -> {
       try {
@@ -106,7 +112,7 @@ public class Benchmark {
     });
   }
 
-  private static long fileSize(File f) {
+  static long fileSize(File f) {
     try {
       if (f.isFile()) {
         return f.length();
@@ -154,31 +160,21 @@ public class Benchmark {
 
   private static LsmTree<FileOutputStream> createLsmTree(Iterator<String> argsItr, File directory) throws IOException {
     var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
-    var baseIndexRate = Integer.parseInt(argsItr.next());
+    var indexRate = Integer.parseInt(argsItr.next());
 
     var directoryOps = new FileDirectoryOperationsImpl(directory);
     directoryOps.mkdirs();
     directoryOps.clear();
-    var baseDeltaFiles = new BaseDeltaFiles<>(directoryOps);
-    var executor = Executors.newScheduledThreadPool(4);
-    var tree = new LsmTree<>(
-        pendingWritesMergeThreshold,
-        baseDeltaFiles,
-        new DeltaWriterCoordinator<>(
-            baseDeltaFiles,
-            baseIndexRate,
-            20,
-            executor
-        ),
-        new BaseDeltaMergerCron<>(
-            baseDeltaFiles,
-            0.75,
-            Duration.ofSeconds(1),
-            baseIndexRate,
-            executor
-        ),
-        executor
-    );
+
+    var tree = LsmTree.builderForDirectory(directoryOps)
+        .withPendingWritesDeltaThreshold(pendingWritesMergeThreshold)
+        .withScheduledThreadPool(4)
+        .withIndexRate(indexRate)
+        .withMaxInFlightWriteJobs(20)
+        .withMaxDeltaReadPercentage(0.75)
+        .withMergeCronFrequency(Duration.ofSeconds(1))
+        .build();
+
     tree.initialize();
     return tree;
   }
@@ -229,7 +225,7 @@ public class Benchmark {
     }
   }
 
-  private static ByteArrayWrapper randomKey(Random random, int keySpaceSize) {
+  static ByteArrayWrapper randomKey(Random random, int keySpaceSize) {
     var s = StringUtils.leftPad(String.valueOf(random.nextInt(keySpaceSize)),
         String.valueOf(keySpaceSize).length(), "0");
     return ByteArrayWrapper.of(s.getBytes());
@@ -243,21 +239,21 @@ public class Benchmark {
   }
 
   // https://en.wikipedia.org/wiki/Reservoir_sampling
-  private static class KeyTracker {
+  static class KeyTracker {
     private final List<ByteArrayWrapper> keys = new ArrayList<>();
     private final int maxKeys = 10 * 1000;
     private final Random random;
     private int keysSeen = 0;
 
-    public KeyTracker(Random random) {
+    KeyTracker(Random random) {
       this.random = random;
     }
 
-    private boolean isEmpty() {
+    boolean isEmpty() {
       return keys.isEmpty();
     }
 
-    private void add(ByteArrayWrapper key) {
+    void add(ByteArrayWrapper key) {
       if (keys.size() <= maxKeys) {
         keys.add(key);
       } else {
@@ -269,20 +265,20 @@ public class Benchmark {
       keysSeen++;
     }
 
-    private ByteArrayWrapper select() {
+    ByteArrayWrapper select() {
       return keys.get(random.nextInt(keys.size()));
     }
   }
 
-  private static class Stats {
-    private final AtomicLong countPut = new AtomicLong(0);
-    private final AtomicLong countDelete = new AtomicLong(0);
-    private final AtomicLong countDeleteFound = new AtomicLong(0);
-    private final AtomicLong countGet = new AtomicLong(0);
-    private final AtomicLong countFound = new AtomicLong(0);
-    private final AtomicLong fileSize = new AtomicLong(0);
+  static class Stats {
+    final AtomicLong countPut = new AtomicLong(0);
+    final AtomicLong countDelete = new AtomicLong(0);
+    final AtomicLong countDeleteFound = new AtomicLong(0);
+    final AtomicLong countGet = new AtomicLong(0);
+    final AtomicLong countFound = new AtomicLong(0);
+    final AtomicLong fileSize = new AtomicLong(0);
 
-    private ImmutableMap<String, Long> getMap() {
+    ImmutableMap<String, Long> getMap() {
       return ImmutableMap.<String, Long>builder()
           .put("put", countPut.get())
           .put("delete", countDelete.get())
@@ -293,7 +289,7 @@ public class Benchmark {
           .build();
     }
 
-    private String toJson() {
+    String toJson() {
       return new Gson().toJson(getMap());
     }
   }

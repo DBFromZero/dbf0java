@@ -1,7 +1,5 @@
 package dbf0.disk_key_value.io;
 
-import dbf0.disk_key_value.FileDirectoryOperations;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;

@@ -1,8 +1,10 @@
 package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.codepoetics.protonpack.StreamUtils;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
 import com.google.common.collect.PeekingIterator;
 import com.google.common.collect.Streams;
 import dbf0.common.ByteArrayWrapper;
@@ -76,10 +78,9 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
   }
 
   public synchronized void shutdown() {
-    if (shutdown) {
+    if (!started || shutdown) {
       return;
     }
-    Preconditions.checkState(started);
     if (checkFuture != null) {
       checkFuture.cancel(true);
     }
@@ -92,13 +93,16 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     }
     try {
       checkForDeltasInternal();
+      synchronized (this) {
+        if (!shutdown) {
+          checkFuture = executor.schedule(this::checkForDeltas, checkForDeltasRate.toMillis(), TimeUnit.MILLISECONDS);
+        }
+      }
     } catch (Exception e) {
-      LOGGER.log(Level.SEVERE, e, () -> "error checking for deltas. shutting down merging cron");
+      LOGGER.log(Level.SEVERE, e, () -> "error in " + getClass().getSimpleName() + ". shutting down");
       hasError = true;
       checkFuture = null;
-      if (!shutdown) {
-        shutdown();
-      }
+      shutdown();
     }
   }
 
@@ -106,22 +110,22 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     var orderedDeltasInUse = baseDeltaFiles.getOrderedDeltasInUse();
     if (orderedDeltasInUse.isEmpty()) {
       LOGGER.finer(() -> "no deltas in use");
-    } else {
-      LOGGER.fine(() -> "ordered deltas in use " + orderedDeltasInUse);
-      Preconditions.checkState(baseDeltaFiles.hasInUseBase());
-
-      var baseOperations = baseDeltaFiles.getBaseOperations();
-      var baseSize = baseOperations.length();
-      var maxDeltaSize = (long) ((double) baseSize * maxDeltaReadPercentage / (1 - maxDeltaReadPercentage));
-      LOGGER.fine(() -> "base size " + Dbf0Util.formatBytes(baseSize) +
-          " max delta size " + Dbf0Util.formatBytes(maxDeltaSize));
-      mergeDeltaAndCommit(collectDeltaOpsForMerge(orderedDeltasInUse, maxDeltaSize));
+      return;
     }
-    scheduleCheck();
-  }
+    LOGGER.fine(() -> "ordered deltas in use " + orderedDeltasInUse);
+    Preconditions.checkState(baseDeltaFiles.hasInUseBase());
 
-  private void scheduleCheck() {
-    checkFuture = executor.schedule(this::checkForDeltas, checkForDeltasRate.toMillis(), TimeUnit.MILLISECONDS);
+    var baseOperations = baseDeltaFiles.getBaseOperations();
+    var baseSize = baseOperations.length();
+    var maxDeltaSize = (long) ((double) baseSize * maxDeltaReadPercentage / (1 - maxDeltaReadPercentage));
+    LOGGER.fine(() -> "base size " + Dbf0Util.formatBytes(baseSize) +
+        " max delta size " + Dbf0Util.formatBytes(maxDeltaSize));
+
+    var orderedDeltaOpsForMerge = collectDeltaOpsForMerge(orderedDeltasInUse, maxDeltaSize);
+    mergeDeltasAndCommit(orderedDeltaOpsForMerge);
+    for (var deltaPair : orderedDeltaOpsForMerge) {
+      baseDeltaFiles.deleteDelta(deltaPair.getKey());
+    }
   }
 
   @NotNull
@@ -146,8 +150,9 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     return deltaOpsForMerge;
   }
 
-  private void mergeDeltaAndCommit(List<Pair<Integer, FileOperations<T>>> orderedDeltaOpsForMerge) throws IOException {
-    LOGGER.info("Merging base with " + orderedDeltaOpsForMerge.size() + " deltas " + orderedDeltaOpsForMerge);
+  private void mergeDeltasAndCommit(List<Pair<Integer, FileOperations<T>>> orderedDeltaOpsForMerge) throws IOException {
+    LOGGER.info(() -> "Merging base with " + orderedDeltaOpsForMerge.size() + " deltas " +
+        orderedDeltaOpsForMerge.stream().map(Pair::getLeft).collect(Collectors.toList()));
     Preconditions.checkState(!orderedDeltaOpsForMerge.isEmpty());
     var baseOperations = baseDeltaFiles.getBaseOperations();
     var baseIndexOperations = baseDeltaFiles.getBaseIndexOperations();
@@ -158,16 +163,16 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
       LOGGER.fine("Total input size " + Dbf0Util.formatBytes(totalSize));
     }
 
-    List<KeyValueFileReader> orderedReaders = new ArrayList<>();
+    // order readers as base and the deltas in descending age such that we prefer that last
+    // entry for a single key
+    var orderedReaders = Lists.newArrayList(batchReader(baseOperations));
+    for (var deltaPair : orderedDeltaOpsForMerge) {
+      orderedReaders.add(batchReader(deltaPair.getRight()));
+    }
+    var selectedIterator = createSortedAndSelectedIterator(orderedReaders);
+
     FileOperations.OverWriter<T> baseOverWriter = null, baseIndexOverWriter = null;
     try {
-      // order readers as base and the deltas in descending age such that we prefer that last
-      // entry for a single key
-      orderedReaders.add(batchReader(baseOperations));
-      for (var deltaPair : orderedDeltaOpsForMerge) {
-        orderedReaders.add(batchReader(deltaPair.getRight()));
-      }
-      var selectedIterator = createSortedAndSelectedIterator(orderedReaders);
       baseOverWriter = baseOperations.createOverWriter();
       baseIndexOverWriter = baseIndexOperations.createOverWriter();
       try (var outputStream = new PositionTrackingStream(baseOverWriter.getOutputStream(), BUFFER_SIZE)) {
@@ -177,9 +182,6 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
         }
       }
       baseDeltaFiles.commitNewBase(baseOverWriter, baseIndexOverWriter);
-      for (var deltaPair : orderedDeltaOpsForMerge) {
-        baseDeltaFiles.deleteDelta(deltaPair.getKey());
-      }
     } catch (Exception e) {
       if (baseOverWriter != null) {
         baseOverWriter.abort();
@@ -187,7 +189,7 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
       if (baseIndexOverWriter != null) {
         baseIndexOverWriter.abort();
       }
-      throw new RuntimeException("Error in merging deltas", e);
+      throw new RuntimeException("Error in merging deltas. Aborting", e);
     } finally {
       for (var reader : orderedReaders) {
         reader.close();
@@ -195,7 +197,7 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     }
   }
 
-  private ValueSelectorIterator createSortedAndSelectedIterator(List<KeyValueFileReader> orderedReaders) {
+  @VisibleForTesting ValueSelectorIterator createSortedAndSelectedIterator(List<KeyValueFileReader> orderedReaders) {
     var rankedIterators = StreamUtils.zipWithIndex(orderedReaders.stream().map(KeyValueFileIterator::new))
         .map(indexedIterator -> addRank(indexedIterator.getValue(), (int) indexedIterator.getIndex()))
         .collect(Collectors.toList());
@@ -203,9 +205,14 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     return new ValueSelectorIterator(mergeSortedIterator);
   }
 
-  private void writeMerged(ValueSelectorIterator selectedIterator, PositionTrackingStream outputStream, KeyValueFileWriter indexWriter) throws IOException {
+  private static Iterator<KeyValueRank> addRank(Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> iterator, int rank) {
+    return Iterators.transform(iterator, pair -> new KeyValueRank(pair.getKey(), pair.getValue(), rank));
+  }
+
+  private void writeMerged(ValueSelectorIterator selectedIterator, PositionTrackingStream outputStream,
+                           KeyValueFileWriter indexWriter) throws IOException {
     var indexBuilder = IndexBuilder.indexBuilder(indexWriter, baseIndexRate);
-    int i = 0, count = 0;
+    long i = 0, count = 0;
     var writer = new KeyValueFileWriter(outputStream);
     while (selectedIterator.hasNext()) {
       if (shutdown) {
@@ -233,45 +240,43 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     return new KeyValueFileReader(new BufferedInputStream(baseIndexFileOperations.createInputStream(), BUFFER_SIZE));
   }
 
-  private static Iterator<KeyValueRank> addRank(Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> iterator, int rank) {
-    return Iterators.transform(iterator, pair -> new KeyValueRank(pair.getKey(), pair.getValue(), rank));
-  }
+  @VisibleForTesting
+  static class KeyValueRank {
+    final ByteArrayWrapper key;
+    final ByteArrayWrapper value;
+    final int rank;
 
-  private static class KeyValueRank {
-    private final ByteArrayWrapper key;
-    private final ByteArrayWrapper value;
-    private final int rank;
-
-    private KeyValueRank(ByteArrayWrapper key, ByteArrayWrapper value, int rank) {
+    KeyValueRank(ByteArrayWrapper key, ByteArrayWrapper value, int rank) {
       this.key = key;
       this.value = value;
       this.rank = rank;
     }
 
-    private ByteArrayWrapper getKey() {
+    ByteArrayWrapper getKey() {
       return key;
     }
   }
 
-  private static class ValueSelectorIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
+  @VisibleForTesting
+  static class ValueSelectorIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
 
-    private final PeekingIterator<KeyValueRank> mergeSortedIterator;
+    private final PeekingIterator<KeyValueRank> sortedIterator;
 
-    public ValueSelectorIterator(Iterator<KeyValueRank> mergeSortedIterator) {
-      this.mergeSortedIterator = Iterators.peekingIterator(mergeSortedIterator);
+    ValueSelectorIterator(Iterator<KeyValueRank> sortedIterator) {
+      this.sortedIterator = Iterators.peekingIterator(sortedIterator);
     }
 
     @Override public boolean hasNext() {
-      return mergeSortedIterator.hasNext();
+      return sortedIterator.hasNext();
     }
 
     @Override public Pair<ByteArrayWrapper, ByteArrayWrapper> next() {
-      var first = mergeSortedIterator.next();
+      var first = sortedIterator.next();
       var key = first.key;
       var highestRank = first.rank;
       var highestRankValue = first.value;
-      while (mergeSortedIterator.hasNext() && mergeSortedIterator.peek().key.equals(key)) {
-        var entry = mergeSortedIterator.next();
+      while (sortedIterator.hasNext() && sortedIterator.peek().key.equals(key)) {
+        var entry = sortedIterator.next();
         if (entry.rank > highestRank) {
           highestRank = entry.rank;
           highestRankValue = entry.value;

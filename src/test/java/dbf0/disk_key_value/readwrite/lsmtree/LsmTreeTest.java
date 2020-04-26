@@ -16,7 +16,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Random;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -73,29 +72,16 @@ public class LsmTreeTest {
   }
 
   private Pair<MemoryFileDirectoryOperations, LsmTree<MemoryFileOperations.MemoryOutputStream>>
-  createTree(int mergedThreshold) throws IOException {
+  createTree(int pendingWritesDeltaThreshold) throws IOException {
     var directoryOperations = new MemoryFileDirectoryOperations();
-    var baseDeltaFiles = new BaseDeltaFiles<>(directoryOperations);
-    var executor = Executors.newScheduledThreadPool(4);
-    int indexRate = 10;
-    var tree = new LsmTree<>(
-        mergedThreshold,
-        baseDeltaFiles,
-        new DeltaWriterCoordinator<>(
-            baseDeltaFiles,
-            indexRate,
-            10,
-            executor
-        ),
-        new BaseDeltaMergerCron<>(
-            baseDeltaFiles,
-            0.5,
-            Duration.ofMillis(250),
-            indexRate,
-            executor
-        ),
-        executor
-    );
+    var tree = LsmTree.builderForTesting(directoryOperations)
+        .withPendingWritesDeltaThreshold(pendingWritesDeltaThreshold)
+        .withScheduledThreadPool(2)
+        .withIndexRate(10)
+        .withMaxInFlightWriteJobs(10)
+        .withMaxDeltaReadPercentage(0.5)
+        .withMergeCronFrequency(Duration.ofMillis(100))
+        .build();
     tree.initialize();
     return Pair.of(directoryOperations, tree);
   }
@@ -126,7 +112,7 @@ public class LsmTreeTest {
     var tester = builder.build();
     return new Thread(() -> {
       try {
-        tester.testPutDeleteGet(100 * 1000, putDeleteGet, knownKeyRate);
+        tester.testPutDeleteGet(25 * 1000, putDeleteGet, knownKeyRate);
       } catch (Exception e) {
         LOGGER.log(Level.SEVERE, e, () -> "error in thread");
         errors.incrementAndGet();

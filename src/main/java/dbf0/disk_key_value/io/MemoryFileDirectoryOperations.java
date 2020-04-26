@@ -1,7 +1,6 @@
 package dbf0.disk_key_value.io;
 
 import com.google.common.base.Preconditions;
-import dbf0.disk_key_value.FileDirectoryOperations;
 
 import java.io.IOException;
 import java.util.List;

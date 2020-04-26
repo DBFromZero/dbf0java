@@ -4,7 +4,7 @@ import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.ReadWriteLockHelper;
-import dbf0.disk_key_value.FileDirectoryOperations;
+import dbf0.disk_key_value.io.FileDirectoryOperations;
 import dbf0.disk_key_value.io.FileOperations;
 import dbf0.disk_key_value.readonly.KeyValueFileIterator;
 import dbf0.disk_key_value.readonly.KeyValueFileReader;
