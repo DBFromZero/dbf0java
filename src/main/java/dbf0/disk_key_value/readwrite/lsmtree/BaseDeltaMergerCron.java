@@ -1,18 +1,12 @@
 package dbf0.disk_key_value.readwrite.lsmtree;
 
-import com.codepoetics.protonpack.StreamUtils;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
-import com.google.common.collect.PeekingIterator;
 import com.google.common.collect.Streams;
-import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.PositionTrackingStream;
 import dbf0.disk_key_value.io.FileOperations;
 import dbf0.disk_key_value.readonly.IndexBuilder;
-import dbf0.disk_key_value.readonly.KeyValueFileIterator;
 import dbf0.disk_key_value.readonly.KeyValueFileReader;
 import dbf0.disk_key_value.readonly.KeyValueFileWriter;
 import org.apache.commons.lang3.tuple.Pair;
@@ -24,8 +18,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -169,7 +161,7 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     for (var deltaPair : orderedDeltaOpsForMerge) {
       orderedReaders.add(batchReader(deltaPair.getRight()));
     }
-    var selectedIterator = createSortedAndSelectedIterator(orderedReaders);
+    var selectedIterator = ValueSelectorIterator.createSortedAndSelectedIterator(orderedReaders);
 
     FileOperations.OverWriter<T> baseOverWriter = null, baseIndexOverWriter = null;
     try {
@@ -195,18 +187,6 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
         reader.close();
       }
     }
-  }
-
-  @VisibleForTesting ValueSelectorIterator createSortedAndSelectedIterator(List<KeyValueFileReader> orderedReaders) {
-    var rankedIterators = StreamUtils.zipWithIndex(orderedReaders.stream().map(KeyValueFileIterator::new))
-        .map(indexedIterator -> addRank(indexedIterator.getValue(), (int) indexedIterator.getIndex()))
-        .collect(Collectors.toList());
-    var mergeSortedIterator = Iterators.mergeSorted(rankedIterators, Comparator.comparing(KeyValueRank::getKey));
-    return new ValueSelectorIterator(mergeSortedIterator);
-  }
-
-  private static Iterator<KeyValueRank> addRank(Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> iterator, int rank) {
-    return Iterators.transform(iterator, pair -> new KeyValueRank(pair.getKey(), pair.getValue(), rank));
   }
 
   private void writeMerged(ValueSelectorIterator selectedIterator, PositionTrackingStream outputStream,
@@ -238,51 +218,5 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
 
   private KeyValueFileReader batchReader(FileOperations<T> baseIndexFileOperations) throws IOException {
     return new KeyValueFileReader(new BufferedInputStream(baseIndexFileOperations.createInputStream(), BUFFER_SIZE));
-  }
-
-  @VisibleForTesting
-  static class KeyValueRank {
-    final ByteArrayWrapper key;
-    final ByteArrayWrapper value;
-    final int rank;
-
-    KeyValueRank(ByteArrayWrapper key, ByteArrayWrapper value, int rank) {
-      this.key = key;
-      this.value = value;
-      this.rank = rank;
-    }
-
-    ByteArrayWrapper getKey() {
-      return key;
-    }
-  }
-
-  @VisibleForTesting
-  static class ValueSelectorIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
-
-    private final PeekingIterator<KeyValueRank> sortedIterator;
-
-    ValueSelectorIterator(Iterator<KeyValueRank> sortedIterator) {
-      this.sortedIterator = Iterators.peekingIterator(sortedIterator);
-    }
-
-    @Override public boolean hasNext() {
-      return sortedIterator.hasNext();
-    }
-
-    @Override public Pair<ByteArrayWrapper, ByteArrayWrapper> next() {
-      var first = sortedIterator.next();
-      var key = first.key;
-      var highestRank = first.rank;
-      var highestRankValue = first.value;
-      while (sortedIterator.hasNext() && sortedIterator.peek().key.equals(key)) {
-        var entry = sortedIterator.next();
-        if (entry.rank > highestRank) {
-          highestRank = entry.rank;
-          highestRankValue = entry.value;
-        }
-      }
-      return Pair.of(key, highestRankValue);
-    }
   }
 }

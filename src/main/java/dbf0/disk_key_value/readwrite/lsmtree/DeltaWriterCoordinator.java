@@ -8,6 +8,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -57,6 +58,7 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
 
   synchronized void addWrites(Map<ByteArrayWrapper, ByteArrayWrapper> writes) {
     Preconditions.checkState(!hasMaxInFlightWriters());
+    writes = Collections.unmodifiableMap(writes);
     if (state == State.UNINITIALIZED) {
       if (baseDeltaFiles.hasInUseBase()) {
         state = State.WRITE_DELTAS;

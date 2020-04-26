@@ -17,7 +17,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.time.Duration;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -267,7 +266,7 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
   }
 
   private void sendWritesToCoordinator() {
-    coordinator.addWrites(Collections.unmodifiableMap(pendingWrites));
+    coordinator.addWrites(pendingWrites);
   }
 
   // for the future it would be nice if we could reject writes and let the application decide how to proceed
