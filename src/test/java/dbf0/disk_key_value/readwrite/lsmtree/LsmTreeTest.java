@@ -93,7 +93,8 @@ public class LsmTreeTest {
             Duration.ofMillis(250),
             indexRate,
             executor
-        )
+        ),
+        executor
     );
     tree.initialize();
     return Pair.of(directoryOperations, tree);

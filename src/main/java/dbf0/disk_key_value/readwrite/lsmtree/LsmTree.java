@@ -13,6 +13,8 @@ import java.io.OutputStream;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> {
@@ -25,6 +27,7 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
   private final BaseDeltaFiles<T> baseDeltaFiles;
   private final DeltaWriterCoordinator<T> coordinator;
   private final BaseDeltaMergerCron<T> mergerCron;
+  private final ExecutorService executorService;
 
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
   private Map<ByteArrayWrapper, ByteArrayWrapper> pendingWrites = new HashMap<>();
@@ -32,12 +35,14 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
   public LsmTree(int pendingWritesMergeThreshold,
                  BaseDeltaFiles<T> baseDeltaFiles,
                  DeltaWriterCoordinator<T> coordinator,
-                 BaseDeltaMergerCron<T> mergerCron) {
+                 BaseDeltaMergerCron<T> mergerCron,
+                 ExecutorService executorService) {
     Preconditions.checkArgument(pendingWritesMergeThreshold > 0);
     this.pendingWritesMergeThreshold = pendingWritesMergeThreshold;
     this.baseDeltaFiles = baseDeltaFiles;
     this.coordinator = coordinator;
     this.mergerCron = mergerCron;
+    this.executorService = executorService;
   }
 
   public void initialize() throws IOException {
@@ -46,6 +51,8 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
 
   @Override public void close() throws IOException {
     mergerCron.shutdown();
+    // Avoid clean shutdown for now since just running for benchmarking
+    /*
     if (isUsable()) {
       lock.runWithWriteLock(() -> {
         if (!pendingWrites.isEmpty()) {
@@ -58,8 +65,15 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
         pendingWrites = null;
       });
     }
+     */
+    executorService.shutdownNow();
+    try {
+      var terminated = executorService.awaitTermination(10, TimeUnit.SECONDS);
+      Preconditions.checkState(terminated);
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
   }
-
 
   @Override public int size() throws IOException {
     throw new RuntimeException("not implemented");

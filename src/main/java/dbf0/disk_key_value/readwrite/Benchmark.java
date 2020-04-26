@@ -73,15 +73,19 @@ public class Benchmark {
     for (var thread : threads) {
       thread.join();
     }
-    storage.close();
 
     if (errors.get() > 0) {
       LOGGER.warning("Errors were encountered. Not reporting results.");
       System.exit(1);
     }
 
-    stats.fileSize.set(file.length());
     System.out.println(stats.toJson());
+    try {
+      storage.close();
+    } catch (Exception e) {
+      LOGGER.log(Level.SEVERE, e, () -> "error in closing storage");
+      System.exit(0);
+    }
   }
 
   private static void waitDuration(Duration duration, Stats stats, AtomicInteger errors, File file) {
@@ -172,7 +176,8 @@ public class Benchmark {
             Duration.ofSeconds(1),
             baseIndexRate,
             executor
-        )
+        ),
+        executor
     );
     tree.initialize();
     return tree;

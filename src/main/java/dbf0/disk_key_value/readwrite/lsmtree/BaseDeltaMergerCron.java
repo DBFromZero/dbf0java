@@ -76,15 +76,17 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
   }
 
   public synchronized void shutdown() {
+    if (shutdown) {
+      return;
+    }
     Preconditions.checkState(started);
-    Preconditions.checkState(!shutdown);
     if (checkFuture != null) {
-      checkFuture.cancel(false);
+      checkFuture.cancel(true);
     }
     shutdown = true;
   }
 
-  private synchronized void checkForDeltas() {
+  private void checkForDeltas() {
     if (shutdown || hasError) {
       return;
     }
@@ -103,7 +105,7 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
   private void checkForDeltasInternal() throws IOException {
     var orderedDeltasInUse = baseDeltaFiles.getOrderedDeltasInUse();
     if (orderedDeltasInUse.isEmpty()) {
-      LOGGER.fine(() -> "no deltas in use");
+      LOGGER.finer(() -> "no deltas in use");
     } else {
       LOGGER.fine(() -> "ordered deltas in use " + orderedDeltasInUse);
       Preconditions.checkState(baseDeltaFiles.hasInUseBase());
@@ -206,7 +208,14 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
     int i = 0, count = 0;
     var writer = new KeyValueFileWriter(outputStream);
     while (selectedIterator.hasNext()) {
+      if (shutdown) {
+        throw new RuntimeException("shutdown while merging. aborting for fast exit");
+      }
       if (i % 10000 == 0) {
+        if (Thread.interrupted()) {
+          Thread.currentThread().interrupt();
+          throw new RuntimeException("interrupted while merging. aborting for fast exit");
+        }
         LOGGER.finer("writing merged entry " + i);
       }
       i++;

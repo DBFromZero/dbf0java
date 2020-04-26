@@ -58,7 +58,7 @@ public class BaseDeltaFiles<T extends OutputStream> {
     synchronized (this) {
       orderedDeltas = new ArrayList<>(orderedInUseDeltas.values());
     }
-    // prefer the later detla and finally the base
+    // prefer the later deltas and finally the base
     var deltaValue = recursivelySearchDeltasInReverse(orderedDeltas.iterator(), key);
     if (deltaValue != null) {
       return deltaValue;
@@ -80,6 +80,7 @@ public class BaseDeltaFiles<T extends OutputStream> {
     // note that it is possible the delta was deleted while we were searching other deltas or
     // while we were waiting for the read lock.
     // that is fine because now the delta is in the base and we always search the deltas first
+    // so if the key was in the delta then we'll find it when we search the base
     return wrapper.lock.callWithReadLock(() -> wrapper.reader == null ? null : wrapper.reader.get(key));
   }
 
@@ -148,7 +149,7 @@ public class BaseDeltaFiles<T extends OutputStream> {
   }
 
   FileOperations<T> getDeltaOperations(Integer delta) {
-    return directoryOperations.file("delta" + delta);
+    return directoryOperations.file("delta-" + delta);
   }
 
   FileOperations<T> getDeltaIndexOperations(Integer delta) {
