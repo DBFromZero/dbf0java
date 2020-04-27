@@ -221,22 +221,27 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
 
   @Nullable @Override public ByteArrayWrapper get(@NotNull ByteArrayWrapper key) throws IOException {
     Preconditions.checkState(isUsable());
-    var outerValue = lock.callWithReadLock(() -> {
+    // search through the various containers that could contain the key in the appropriate order
+    var value = lock.callWithReadLock(() -> {
       Preconditions.checkState(pendingWrites != null, "is closed");
-      var value = pendingWrites.get(key);
-      if (value != null) {
-        return value;
-      }
-      return coordinator.searchForKeyInWritesInProgress(key);
+      return pendingWrites.get(key);
     });
-    if (outerValue != null) {
-      return outerValue.equals(DELETE_VALUE) ? null : outerValue;
+    if (value != null) {
+      return checkForDeleteValue(value);
+    }
+    value = coordinator.searchForKeyInWritesInProgress(key);
+    if (value != null) {
+      return checkForDeleteValue(value);
     }
     if (!baseDeltaFiles.hasInUseBase()) {
       return null;
     }
-    var value = baseDeltaFiles.searchForKey(key);
-    return value == null || value.equals(DELETE_VALUE) ? null : value;
+    value = baseDeltaFiles.searchForKey(key);
+    return value == null ? null : checkForDeleteValue(value);
+  }
+
+  private @Nullable ByteArrayWrapper checkForDeleteValue(@NotNull ByteArrayWrapper value) {
+    return value.equals(DELETE_VALUE) ? null : value;
   }
 
   @Override public boolean delete(@NotNull ByteArrayWrapper key) throws IOException {

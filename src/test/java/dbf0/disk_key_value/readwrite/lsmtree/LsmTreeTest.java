@@ -38,7 +38,7 @@ public class LsmTreeTest {
     var operations = create.getLeft();
     var tree = create.getRight();
     var builder = ReadWriteStorageTester.builderForBytes(tree, RandomSeed.CAFE.random(), 16, 4096)
-        .debug(false)
+        .debug(true)
         .checkDeleteReturnValue(false)
         .checkSize(false);
     var count = new AtomicInteger(0);
@@ -48,7 +48,7 @@ public class LsmTreeTest {
       }
     });
     var tester = builder.build();
-    tester.testPutDeleteGet(10 * 1000, PutDeleteGet.PUT_HEAVY, KnownKeyRate.MID);
+    tester.testPutDeleteGet(10 * 1000, PutDeleteGet.BALANCED, KnownKeyRate.MID);
   }
 
 

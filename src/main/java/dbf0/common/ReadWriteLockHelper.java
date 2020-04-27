@@ -25,6 +25,17 @@ public class ReadWriteLockHelper {
     }
   }
 
+  public <T> T callWithReadLockUnchecked(IOCallable<T> callable) {
+    readWriteLock.readLock().lock();
+    try {
+      return callable.call();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    } finally {
+      readWriteLock.readLock().unlock();
+    }
+  }
+
   public void runWithReadLock(IORunnable runnable) throws IOException {
     readWriteLock.readLock().lock();
     try {
@@ -47,6 +58,17 @@ public class ReadWriteLockHelper {
     readWriteLock.writeLock().lock();
     try {
       runnable.run();
+    } finally {
+      readWriteLock.writeLock().unlock();
+    }
+  }
+
+  public void runWithWriteLockUnchecked(IORunnable runnable) {
+    readWriteLock.writeLock().lock();
+    try {
+      runnable.run();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     } finally {
       readWriteLock.writeLock().unlock();
     }
