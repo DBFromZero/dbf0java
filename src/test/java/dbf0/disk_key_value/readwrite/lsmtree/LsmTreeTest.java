@@ -34,9 +34,9 @@ public class LsmTreeTest {
   }
 
   @Test public void testSingleThreaded() throws IOException {
-    var create = createTree(1000);
-    var operations = create.getLeft();
-    var tree = create.getRight();
+    var lsmTree = createLsmTree(1000);
+    var operations = lsmTree.getLeft();
+    var tree = lsmTree.getRight();
     var builder = ReadWriteStorageTester.builderForBytes(tree, RandomSeed.CAFE.random(), 16, 4096)
         .debug(true)
         .checkDeleteReturnValue(false)
@@ -53,7 +53,7 @@ public class LsmTreeTest {
 
 
   @Test public void testMultiThread() throws Exception {
-    var create = createTree(5 * 1000);
+    var create = createLsmTree(5 * 1000);
     var operations = create.getLeft();
     var tree = create.getRight();
     var errors = new AtomicInteger(0);
@@ -72,7 +72,7 @@ public class LsmTreeTest {
   }
 
   private Pair<MemoryFileDirectoryOperations, LsmTree<MemoryFileOperations.MemoryOutputStream>>
-  createTree(int pendingWritesDeltaThreshold) throws IOException {
+  createLsmTree(int pendingWritesDeltaThreshold) throws IOException {
     var directoryOperations = new MemoryFileDirectoryOperations();
     var tree = LsmTree.builderForTesting(directoryOperations)
         .withPendingWritesDeltaThreshold(pendingWritesDeltaThreshold)
