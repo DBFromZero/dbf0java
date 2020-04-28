@@ -3,6 +3,7 @@ package dbf0.common;
 import java.io.IOException;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 
 public class ReadWriteLockHelper {
 
@@ -25,12 +26,10 @@ public class ReadWriteLockHelper {
     }
   }
 
-  public <T> T callWithReadLockUnchecked(IOCallable<T> callable) {
+  public <T> T callWithReadLockUnchecked(Supplier<T> callable) {
     readWriteLock.readLock().lock();
     try {
-      return callable.call();
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+      return callable.get();
     } finally {
       readWriteLock.readLock().unlock();
     }
@@ -63,12 +62,10 @@ public class ReadWriteLockHelper {
     }
   }
 
-  public void runWithWriteLockUnchecked(IORunnable runnable) {
+  public void runWithWriteLockUnchecked(Runnable runnable) {
     readWriteLock.writeLock().lock();
     try {
       runnable.run();
-    } catch (IOException e) {
-      throw new RuntimeException(e);
     } finally {
       readWriteLock.writeLock().unlock();
     }
