@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.logging.Logger;
 
-interface IndexBuilder {
+public interface IndexBuilder {
 
   Logger LOGGER = Dbf0Util.getLogger(IndexBuilder.class);
 
@@ -37,7 +37,7 @@ interface IndexBuilder {
 
     @Override public void accept(long position, ByteArrayWrapper key) throws IOException {
       if (keyCount % indexRate == 0) {
-        LOGGER.fine(() -> "writing index at " + keyCount);
+        LOGGER.finest(() -> "writing index at " + keyCount);
         indexStorage.append(key, ByteArrayWrapper.of(ByteBuffer.allocate(8).putLong(position).array()));
       }
       keyCount++;

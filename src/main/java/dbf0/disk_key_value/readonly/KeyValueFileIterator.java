@@ -7,12 +7,12 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.Iterator;
 
-class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
+public class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
   private final KeyValueFileReader reader;
   private boolean hasReadNext = false;
   private Pair<ByteArrayWrapper, ByteArrayWrapper> next = null;
 
-  KeyValueFileIterator(KeyValueFileReader reader) {
+  public KeyValueFileIterator(KeyValueFileReader reader) {
     this.reader = reader;
   }
 
