@@ -53,7 +53,7 @@ public class LockingBlockBTree<K extends Comparable<K>, V> implements BTree<K, V
     tree.initialize();
   }
 
-  @Override public int size() throws IOException {
+  @Override public long size() throws IOException {
     return lock.callWithReadLock(tree::size);
   }
 

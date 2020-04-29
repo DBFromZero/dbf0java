@@ -19,7 +19,7 @@ public class MemoryBTree<K extends Comparable<K>, V> implements BTree<K, V> {
     root = storage.createLeaf();
   }
 
-  @Override public int size() {
+  @Override public long size() {
     return root.size();
   }
 

@@ -199,7 +199,7 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
     }
   }
 
-  @Override public int size() throws IOException {
+  @Override public long size() throws IOException {
     throw new RuntimeException("not implemented");
   }
 
