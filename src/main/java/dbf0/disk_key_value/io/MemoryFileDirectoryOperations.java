@@ -38,7 +38,7 @@ public class MemoryFileDirectoryOperations implements FileDirectoryOperations<Me
     return exists;
   }
 
-  @Override public List<String> list() throws IOException {
+  @Override public List<String> list() {
     return children.entrySet().stream().filter(
         e -> e.getValue().isLeft() ? e.getValue().getLeft().exists() : e.getValue().get().exists)
         .map(Map.Entry::getKey).collect(Collectors.toList());
@@ -70,11 +70,11 @@ public class MemoryFileDirectoryOperations implements FileDirectoryOperations<Me
     return entry.getLeft();
   }
 
-  @Override public FileDirectoryOperations<MemoryFileOperations.MemoryOutputStream> subDirectory(String name) {
+  @Override public MemoryFileDirectoryOperations subDirectory(String name) {
     Preconditions.checkArgument(!name.contains("/"));
     var entry = children.get(name);
     if (entry == null) {
-      entry = Either.left(new MemoryFileOperations(name));
+      entry = Either.right(new MemoryFileDirectoryOperations(name));
       children.put(name, entry);
     } else if (entry.isLeft()) {
       throw new IllegalArgumentException(name + " is a directory");

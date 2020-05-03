@@ -100,14 +100,13 @@ public class Benchmark {
   }
 
   static void waitDuration(Duration duration, AtomicReference<Stats> stats, AtomicInteger errors, File file) {
-    var sleepInterval = 1000L;
+    var sleepInterval = 10L * 1000L;
     IntStream.range(0, (int) (duration.toMillis() / sleepInterval)).forEach(index -> {
+      if (errors.get() != 0) {
+        return;
+      }
       try {
-        if (errors.get() == 0) {
-          Thread.sleep(sleepInterval);
-        } else {
-          return;
-        }
+        Thread.sleep(sleepInterval);
         var currentStats = stats.getAndSet(new Stats());
         currentStats.fileSize.set(fileSize(file));
         currentStats.nanoTime.set(System.nanoTime());
