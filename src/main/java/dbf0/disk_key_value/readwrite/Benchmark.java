@@ -13,11 +13,15 @@ import dbf0.disk_key_value.io.SerializationPair;
 import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.FileMetadataStorage;
 import dbf0.disk_key_value.readwrite.btree.*;
+import dbf0.disk_key_value.readwrite.log.FrequencyLogSynchronizer;
+import dbf0.disk_key_value.readwrite.log.ImmediateLogSynchronizer;
+import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
 import dbf0.disk_key_value.readwrite.lsmtree.InterruptedExceptionWrapper;
 import dbf0.disk_key_value.readwrite.lsmtree.LsmTree;
 import dbf0.test.PutDeleteGet;
 import org.apache.commons.lang3.StringUtils;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -94,6 +98,9 @@ public class Benchmark {
         break;
       case "part-lsm":
         storage = createPartitionedLsmTree(argsItr, file);
+        break;
+      case "part-lsm-log":
+        storage = createPartitionedLsmTreeWithWriteAheadLog(argsItr, file);
         break;
       default:
         throw new IllegalArgumentException("Bad storage type: " + type);
@@ -172,7 +179,8 @@ public class Benchmark {
     var indexRate = Integer.parseInt(argsItr.next());
     var executorService = Executors.newScheduledThreadPool(4);
     return new ReadWriteStorageWithBackgroundTasks<>(
-        createLsmTree(new FileDirectoryOperationsImpl(directory), pendingWritesMergeThreshold, indexRate, executorService),
+        createLsmTree(new FileDirectoryOperationsImpl(directory), pendingWritesMergeThreshold, indexRate,
+            executorService, null),
         executorService);
   }
 
@@ -190,19 +198,47 @@ public class Benchmark {
     return new ReadWriteStorageWithBackgroundTasks<>(
         HashPartitionedReadWriteStorage.create(partitions,
             partition -> createLsmTree(base.subDirectory(String.valueOf(partition)),
-                pendingWritesMergeThreshold, indexRate, executor)),
+                pendingWritesMergeThreshold, indexRate, executor, null)),
+        executor);
+  }
+
+  private static ReadWriteStorageWithBackgroundTasks<ByteArrayWrapper, ByteArrayWrapper>
+  createPartitionedLsmTreeWithWriteAheadLog(Iterator<String> argsItr, File directory) throws IOException {
+    var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
+    var indexRate = Integer.parseInt(argsItr.next());
+    var partitions = Integer.parseInt(argsItr.next());
+    var logSyncFrequency = Duration.parse(argsItr.next());
+
+    var executor = Executors.newScheduledThreadPool(8);
+
+    var base = new FileDirectoryOperationsImpl(directory);
+    base.mkdirs();
+    base.clear();
+
+    return new ReadWriteStorageWithBackgroundTasks<>(
+        HashPartitionedReadWriteStorage.create(partitions,
+            partition -> {
+              var partitionDir = base.subDirectory(String.valueOf(partition));
+              return createLsmTree(partitionDir.subDirectory("data"),
+                  pendingWritesMergeThreshold, indexRate, executor,
+                  new WriteAheadLog<>(partitionDir.subDirectory("log"),
+                      logSyncFrequency.isZero() ? ImmediateLogSynchronizer.factory() :
+                          FrequencyLogSynchronizer.factory(executor, logSyncFrequency)));
+            }),
         executor);
   }
 
   private static LsmTree<FileOutputStream> createLsmTree(FileDirectoryOperationsImpl directoryOps,
                                                          int pendingWritesMergeThreshold, int indexRate,
-                                                         ScheduledExecutorService executorService) throws IOException {
+                                                         ScheduledExecutorService executorService,
+                                                         @Nullable WriteAheadLog<?> writeAheadLog) throws IOException {
     directoryOps.mkdirs();
     directoryOps.clear();
 
     var tree = LsmTree.builderForDirectory(directoryOps)
         .withPendingWritesDeltaThreshold(pendingWritesMergeThreshold)
         .withScheduledExecutorService(executorService)
+        .withWriteAheadLog(writeAheadLog)
         .withIndexRate(indexRate)
         .withMaxInFlightWriteJobs(20)
         .withMaxDeltaReadPercentage(0.75)

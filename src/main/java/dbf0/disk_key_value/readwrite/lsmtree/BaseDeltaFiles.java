@@ -20,11 +20,13 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.TreeMap;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 
 public class BaseDeltaFiles<T extends OutputStream> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(BaseDeltaFiles.class);
   private static final int BUFFER_SIZE = 0x4000;
+  public static final String DELTA_PREFIX = "delta-";
 
   private final FileDirectoryOperations<T> directoryOperations;
   private final FileOperations<T> baseOperations;
@@ -45,6 +47,28 @@ public class BaseDeltaFiles<T extends OutputStream> {
 
   public boolean hasInUseBase() {
     return baseWrapper != null;
+  }
+
+  public void loadExisting() throws IOException {
+    if (!directoryOperations.exists()) {
+      directoryOperations.mkdirs();
+      return;
+    }
+    if (baseOperations.exists()) {
+      Preconditions.checkState(baseIndexOperations.exists());
+      setBase();
+    }
+    int maxDelta = -1;
+    var deltaPattern = Pattern.compile(DELTA_PREFIX + "(\\d+)$");
+    for (var path : directoryOperations.list()) {
+      var matcher = deltaPattern.matcher(path);
+      if (matcher.matches()) {
+        var delta = Integer.parseInt(matcher.group(1));
+        addDelta(delta);
+        maxDelta = Math.max(maxDelta, delta);
+      }
+    }
+    nextDelta = maxDelta + 1;
   }
 
   // ordered oldest to newest
@@ -149,20 +173,12 @@ public class BaseDeltaFiles<T extends OutputStream> {
   }
 
   FileOperations<T> getDeltaOperations(Integer delta) {
-    return directoryOperations.file("delta-" + delta);
+    return directoryOperations.file(DELTA_PREFIX + delta);
   }
 
   FileOperations<T> getDeltaIndexOperations(Integer delta) {
     Preconditions.checkArgument(delta >= 0);
-    return directoryOperations.file("delta-" + delta + "-index");
-  }
-
-  private KeyValueFileReader createBaseReader() throws IOException {
-    return createReader(baseOperations);
-  }
-
-  private KeyValueFileReader deltaReader(Integer delta) throws IOException {
-    return createReader(getDeltaOperations(delta));
+    return directoryOperations.file(DELTA_PREFIX + delta + "-index");
   }
 
   @NotNull private KeyValueFileReader createReader(FileOperations<T> operations) throws IOException {

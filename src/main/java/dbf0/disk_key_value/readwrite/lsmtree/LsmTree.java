@@ -9,7 +9,10 @@ import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
 import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
 import dbf0.disk_key_value.io.MemoryFileOperations;
 import dbf0.disk_key_value.readwrite.CloseableReadWriteStorage;
+import dbf0.disk_key_value.readwrite.ReadWriteStorageWithBackgroundTasks;
+import dbf0.disk_key_value.readwrite.log.LogConsumer;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
+import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
@@ -19,6 +22,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Logger;
@@ -112,6 +116,15 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
     }
 
     public LsmTree<T> build() {
+      return buildInternal().getLeft();
+    }
+
+    public ReadWriteStorageWithBackgroundTasks<ByteArrayWrapper, ByteArrayWrapper> buildWithBackgroundTaks() {
+      var pair = buildInternal();
+      return new ReadWriteStorageWithBackgroundTasks<>(pair.getLeft(), pair.getRight());
+    }
+
+    private Pair<LsmTree<T>, ExecutorService> buildInternal() {
       Preconditions.checkState(baseDeltaFiles != null, "must specify baseDeltaFiles");
       ScheduledExecutorService executorService = this.executorService;
       if (executorService == null) {
@@ -127,7 +140,8 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
         mergerCron = new BaseDeltaMergerCron<>(baseDeltaFiles, maxDeltaReadPercentage, mergeCronFrequency,
             indexRate, executorService);
       }
-      return new LsmTree<>(pendingWritesDeltaThreshold, baseDeltaFiles, coordinator, mergerCron, writeAheadLog);
+      return Pair.of(new LsmTree<>(pendingWritesDeltaThreshold, baseDeltaFiles, coordinator, mergerCron, writeAheadLog),
+          executorService);
     }
   }
 
@@ -175,7 +189,31 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
     this.writeAheadLog = writeAheadLog;
   }
 
-  public void initialize() throws IOException {
+  @Override public void initialize() throws IOException {
+    baseDeltaFiles.loadExisting();
+
+    if (writeAheadLog != null) {
+      writeAheadLog.initialize(() -> {
+        // these pending writes don't need a log since they are already persisted in current log that we're reading
+        pendingWrites = new PendingWritesAndLog(new HashMap<>(pendingWritesDeltaThreshold), null);
+        return new LogConsumer() {
+          @Override public void put(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
+            pendingWrites.writes.put(key, value);
+          }
+
+          @Override public void delete(@NotNull ByteArrayWrapper key) throws IOException {
+            pendingWrites.writes.put(key, DELETE_VALUE);
+          }
+
+          @Override public void persist() throws IOException {
+            sendWritesToCoordinator();
+            coordinator.addWrites(pendingWrites);
+            pendingWrites = new PendingWritesAndLog(new HashMap<>(pendingWritesDeltaThreshold), null);
+          }
+        };
+      });
+    }
+
     mergerCron.start();
     createNewPendingWrites();
   }
@@ -190,9 +228,21 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
             LOGGER.warning("Delaying close because DeltaWriteCoordinator is backed up");
             waitForWritesToUnblock();
           }
+          LOGGER.info("writing pending at close");
           sendWritesToCoordinator();
         }
         pendingWrites = null;
+
+        try {
+          while (coordinator.hasInFlightWriters() && coordinator.isUsable()) {
+            LOGGER.info("Waiting for deltas to finish writing");
+            synchronized (coordinator) {
+              coordinator.wait();
+            }
+          }
+        } catch (InterruptedException e) {
+          LOGGER.warning("Interrupted waiting for deltas to finish writing");
+        }
       });
     }
   }
@@ -202,7 +252,7 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
   }
 
   public boolean isUsable() {
-    return !coordinator.anyWritesAborted() && !mergerCron.hasErrors();
+    return coordinator.isUsable() && !mergerCron.hasErrors();
   }
 
   @Override public void put(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
@@ -290,8 +340,10 @@ public class LsmTree<T extends OutputStream> implements CloseableReadWriteStorag
   private void waitForWritesToUnblock() throws IOException {
     LOGGER.warning("There are too many in-flight write jobs. Waiting for them to finish");
     try {
-      while (coordinator.hasMaxInFlightWriters()) {
-        Thread.sleep(500);
+      while (coordinator.hasMaxInFlightWriters() && coordinator.isUsable()) {
+        synchronized (coordinator) {
+          coordinator.wait();
+        }
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();

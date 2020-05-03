@@ -5,6 +5,7 @@ import dbf0.common.ByteArrayWrapper;
 import dbf0.common.PrefixIo;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.BufferedOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -17,7 +18,10 @@ public class WriteAheadLogWriter implements Closeable {
 
   public WriteAheadLogWriter(String name, OutputStream outputStream, LogSynchronizer logSynchronizer) {
     this.name = name;
-    this.outputStream = outputStream;
+    this.outputStream = outputStream instanceof BufferedOutputStream ? outputStream :
+        // use a buffer to collect the small writes used for prefix characters
+        // always flush the buffer after writing an entry
+        new BufferedOutputStream(outputStream, 2048);
     this.logSynchronizer = logSynchronizer;
   }
 
@@ -30,6 +34,7 @@ public class WriteAheadLogWriter implements Closeable {
     outputStream.write(WriteAheadLogConstants.PUT);
     PrefixIo.writeBytes(outputStream, key);
     PrefixIo.writeBytes(outputStream, value);
+    outputStream.flush();
     logSynchronizer.registerLog();
   }
 
@@ -37,10 +42,12 @@ public class WriteAheadLogWriter implements Closeable {
     Preconditions.checkState(outputStream != null, "%s is already closed", name);
     outputStream.write(WriteAheadLogConstants.DELETE);
     PrefixIo.writeBytes(outputStream, key);
+    outputStream.flush();
     logSynchronizer.registerLog();
   }
 
   @Override public synchronized void close() throws IOException {
+    logSynchronizer.close();
     outputStream.close();
     outputStream = null;
   }

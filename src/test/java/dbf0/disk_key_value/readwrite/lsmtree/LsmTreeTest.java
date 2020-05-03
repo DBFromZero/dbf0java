@@ -1,11 +1,13 @@
 package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.google.common.collect.Streams;
+import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
 import dbf0.disk_key_value.io.MemoryFileOperations;
 import dbf0.disk_key_value.io.ReadOnlyFileOperations;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
+import dbf0.disk_key_value.readwrite.ReadWriteStorageWithBackgroundTasks;
 import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
 import dbf0.test.RandomSeed;
@@ -15,8 +17,10 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -69,6 +73,40 @@ public class LsmTreeTest {
       thread.join();
     }
     assertThat(errors.get()).isZero();
+  }
+
+  @Test public void testLoadExisting() throws IOException {
+    var directoryOperations = new MemoryFileDirectoryOperations();
+    var createLsmTree = (Supplier<ReadWriteStorageWithBackgroundTasks<ByteArrayWrapper, ByteArrayWrapper>>) () ->
+        LsmTree.builderForTesting(directoryOperations)
+            .withPendingWritesDeltaThreshold(1000)
+            .withScheduledThreadPool(2)
+            .withIndexRate(10)
+            .withMaxInFlightWriteJobs(10)
+            .withMaxDeltaReadPercentage(0.5)
+            .withMergeCronFrequency(Duration.ofMillis(100))
+            .buildWithBackgroundTaks();
+
+    var initialTree = createLsmTree.get();
+    initialTree.initialize();
+
+    var map = new HashMap<ByteArrayWrapper, ByteArrayWrapper>();
+    var random = RandomSeed.CAFE.random();
+    for (int i = 0; i < 1500; i++) {
+      var key = ByteArrayWrapper.random(random, 16);
+      var value = ByteArrayWrapper.random(random, 100);
+      map.put(key, value);
+      initialTree.put(key, value);
+    }
+    initialTree.close();
+
+    var readingTree = createLsmTree.get();
+    readingTree.initialize();
+
+    for (var entry : map.entrySet()) {
+      assertThat(readingTree.get(entry.getKey())).isEqualTo(entry.getValue());
+    }
+    readingTree.close();
   }
 
   private Pair<MemoryFileDirectoryOperations, LsmTree<MemoryFileOperations.MemoryOutputStream>>

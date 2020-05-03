@@ -17,7 +17,7 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
     this.storage = storage;
   }
 
-  void initialize() throws IOException {
+  @Override public void initialize() throws IOException {
     Preconditions.checkState(rootId == BTreeStorage.NO_ID, "already initialized");
     var root = storage.createLeaf();
     storage.writeChanges();

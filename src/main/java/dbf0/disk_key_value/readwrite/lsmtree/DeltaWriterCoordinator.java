@@ -52,17 +52,21 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     this.writeAheadLog = writeAheadLog;
   }
 
-
-  boolean anyWritesAborted() {
-    return anyWriteAborted;
+  boolean isUsable() {
+    return !anyWriteAborted;
   }
 
   boolean hasMaxInFlightWriters() {
     return lock.callWithReadLockUnchecked(inFlightWriters::size) == maxInFlightWriters;
   }
 
+  boolean hasInFlightWriters() {
+    return !lock.callWithReadLockUnchecked(inFlightWriters::isEmpty);
+  }
+
   void addWrites(PendingWritesAndLog originalWrites) {
     Preconditions.checkState(!hasMaxInFlightWriters());
+    Preconditions.checkState(isUsable());
     var writes = new PendingWritesAndLog(Collections.unmodifiableMap(originalWrites.writes), originalWrites.logWriter);
     lock.runWithWriteLockUnchecked(() -> {
       if (state == State.UNINITIALIZED) {
@@ -114,38 +118,44 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     if (anyWriteAborted) {
       LOGGER.warning("Not committing " + writer.getName() + " since an earlier writer aborted");
       abortWrites(writer);
-      return;
-    }
-
-    lock.runWithWriteLockUnchecked(() -> {
-      if (state == State.WRITING_BASE && !writer.isBase()) {
-        // we cannot write a delta before writing the base so wait
-        LOGGER.info(() -> "Writer " + writer.getName() + " finished before the initial base finished. " +
-            "Will re-attempt to commit this later");
-        executor.schedule(() -> reattemptCommitWrites(writer, 1), 1, TimeUnit.SECONDS);
-        return;
-      }
-      try {
-        if (state == State.WRITING_BASE) {
-          Preconditions.checkState(writer.isBase());
-          baseDeltaFiles.setBase();
-          state = State.WRITE_DELTAS;
+    } else {
+      lock.runWithWriteLockUnchecked(() -> {
+        if (state == State.WRITING_BASE && !writer.isBase()) {
+          // we cannot write a delta before writing the base so wait
+          LOGGER.info(() -> "Writer " + writer.getName() + " finished before the initial base finished. " +
+              "Will re-attempt to commit this later");
+          executor.schedule(() -> reattemptCommitWrites(writer, 1), 1, TimeUnit.SECONDS);
         } else {
-          Preconditions.checkState(state == State.WRITE_DELTAS);
-          baseDeltaFiles.addDelta(writer.getDelta());
+          commitWritesWithLogging(writer);
         }
-        var logWriter = writer.getPendingWritesAndLog().logWriter;
-        if (logWriter != null) {
-          Preconditions.checkState(writeAheadLog != null);
-          writeAheadLog.freeWriter(logWriter.getName());
-        }
-        var removed = inFlightWriters.remove(writer);
-        Preconditions.checkState(removed);
-      } catch (Exception e) {
-        LOGGER.log(Level.SEVERE, e, () -> "error in committing writes. aborting");
-        abortWrites(writer);
+      });
+    }
+    synchronized (this) {
+      notifyAll(); // LSMTree awaits writes to finish when shutting down or when at capacity
+    }
+  }
+
+  private void commitWritesWithLogging(WriteSortedEntriesJob<T> writer) {
+    try {
+      if (state == State.WRITING_BASE) {
+        Preconditions.checkState(writer.isBase());
+        baseDeltaFiles.setBase();
+        state = State.WRITE_DELTAS;
+      } else {
+        Preconditions.checkState(state == State.WRITE_DELTAS);
+        baseDeltaFiles.addDelta(writer.getDelta());
       }
-    });
+      var logWriter = writer.getPendingWritesAndLog().logWriter;
+      if (logWriter != null) {
+        Preconditions.checkState(writeAheadLog != null);
+        writeAheadLog.freeWriter(logWriter.getName());
+      }
+      var removed = inFlightWriters.remove(writer);
+      Preconditions.checkState(removed);
+    } catch (Exception e) {
+      LOGGER.log(Level.SEVERE, e, () -> "error in committing writes. aborting");
+      abortWrites(writer);
+    }
   }
 
   void reattemptCommitWrites(WriteSortedEntriesJob<T> writer, int count) {
