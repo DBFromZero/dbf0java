@@ -6,7 +6,7 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 
 public interface ReadWriteStorage<K, V> {
-  int size() throws IOException;
+  long size() throws IOException;
 
   void put(@NotNull K key, @NotNull V value) throws IOException;
 

@@ -22,8 +22,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -50,7 +53,7 @@ public class Benchmark {
 
     var storage = createStorage(argsItr, file, type);
 
-    var stats = new Stats();
+    var stats = new AtomicReference<>(new Stats());
     var errors = new AtomicInteger(0);
     var threads = IntStream.range(0, threadCount).mapToObj(i ->
         new Thread(() -> runOperations(keySpaceSize, valueLength, putDeleteGet, knownKeyRate, storage, stats, errors)))
@@ -64,11 +67,10 @@ public class Benchmark {
     }
 
     if (errors.get() > 0) {
-      LOGGER.warning("Errors were encountered. Not reporting results.");
+      LOGGER.warning("Errors were encountered. Exiting with status 1.");
       System.exit(1);
     }
 
-    System.out.println(stats.toJson());
     try {
       storage.close();
     } catch (Exception e) {
@@ -87,6 +89,9 @@ public class Benchmark {
       case "lsm":
         storage = createLsmTree(argsItr, file);
         break;
+      case "part-lsm":
+        storage = createPartitionedLsmTree(argsItr, file);
+        break;
       default:
         throw new IllegalArgumentException("Bad storage type: " + type);
     }
@@ -94,18 +99,18 @@ public class Benchmark {
     return storage;
   }
 
-  static void waitDuration(Duration duration, Stats stats, AtomicInteger errors, File file) {
-    var sleepInterval = 1000L;
+  static void waitDuration(Duration duration, AtomicReference<Stats> stats, AtomicInteger errors, File file) {
+    var sleepInterval = 10L * 1000L;
     IntStream.range(0, (int) (duration.toMillis() / sleepInterval)).forEach(index -> {
+      if (errors.get() != 0) {
+        return;
+      }
       try {
-        if (errors.get() == 0) {
-          Thread.sleep(sleepInterval);
-        }
-        stats.fileSize.set(fileSize(file));
-        LOGGER.info(String.format("time=%.1fs size=%s intermediate stats %s",
-            (double) (index * sleepInterval) / 1000,
-            Dbf0Util.formatBytes(stats.fileSize.get()),
-            stats.toJson()));
+        Thread.sleep(sleepInterval);
+        var currentStats = stats.getAndSet(new Stats());
+        currentStats.fileSize.set(fileSize(file));
+        currentStats.nanoTime.set(System.nanoTime());
+        System.out.println(currentStats.toJson());
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
@@ -161,14 +166,35 @@ public class Benchmark {
   private static LsmTree<FileOutputStream> createLsmTree(Iterator<String> argsItr, File directory) throws IOException {
     var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
     var indexRate = Integer.parseInt(argsItr.next());
+    return createLsmTree(new FileDirectoryOperationsImpl(directory), pendingWritesMergeThreshold, indexRate,
+        Executors.newScheduledThreadPool(4));
+  }
 
-    var directoryOps = new FileDirectoryOperationsImpl(directory);
+  private static HashPartitionedReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper>
+  createPartitionedLsmTree(Iterator<String> argsItr, File directory) throws IOException {
+    var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
+    var indexRate = Integer.parseInt(argsItr.next());
+    var partitions = Integer.parseInt(argsItr.next());
+    var executor = Executors.newScheduledThreadPool(8);
+
+    var base = new FileDirectoryOperationsImpl(directory);
+    base.mkdirs();
+    base.clear();
+
+    return HashPartitionedReadWriteStorage.create(partitions,
+        partition -> createLsmTree(base.subDirectory(String.valueOf(partition)),
+            pendingWritesMergeThreshold, indexRate, executor));
+  }
+
+  private static LsmTree<FileOutputStream> createLsmTree(FileDirectoryOperationsImpl directoryOps,
+                                                         int pendingWritesMergeThreshold, int indexRate,
+                                                         ScheduledExecutorService executorService) throws IOException {
     directoryOps.mkdirs();
     directoryOps.clear();
 
     var tree = LsmTree.builderForDirectory(directoryOps)
         .withPendingWritesDeltaThreshold(pendingWritesMergeThreshold)
-        .withScheduledThreadPool(4)
+        .withScheduledExecutorService(executorService)
         .withIndexRate(indexRate)
         .withMaxInFlightWriteJobs(20)
         .withMaxDeltaReadPercentage(0.75)
@@ -181,7 +207,7 @@ public class Benchmark {
 
   private static void runOperations(int keySpaceSize, int valueLength, PutDeleteGet putDeleteGet, double knownKeyRate,
                                     ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage,
-                                    Stats stats, AtomicInteger errors) {
+                                    AtomicReference<Stats> stats, AtomicInteger errors) {
     try {
       var random = new Random();
       var keyTracker = new KeyTracker(random);
@@ -196,20 +222,20 @@ public class Benchmark {
             var key = randomKey(random, keySpaceSize);
             storage.put(key, ByteArrayWrapper.random(random, valueLength));
             keyTracker.add(key);
-            stats.countPut.incrementAndGet();
+            stats.get().countPut.incrementAndGet();
             break;
           case GET:
             var value = storage.get(getDelKeyGenerate.get());
-            stats.countGet.incrementAndGet();
+            stats.get().countGet.incrementAndGet();
             if (value != null) {
-              stats.countFound.incrementAndGet();
+              stats.get().countFound.incrementAndGet();
             }
             break;
           case DELETE:
             var deleted = storage.delete(getDelKeyGenerate.get());
-            stats.countDelete.incrementAndGet();
+            stats.get().countDelete.incrementAndGet();
             if (deleted) {
-              stats.countDeleteFound.incrementAndGet();
+              stats.get().countDeleteFound.incrementAndGet();
             }
             break;
           default:
@@ -271,6 +297,7 @@ public class Benchmark {
   }
 
   static class Stats {
+    final AtomicLong nanoTime = new AtomicLong(0);
     final AtomicLong countPut = new AtomicLong(0);
     final AtomicLong countDelete = new AtomicLong(0);
     final AtomicLong countDeleteFound = new AtomicLong(0);
@@ -280,6 +307,7 @@ public class Benchmark {
 
     ImmutableMap<String, Long> getMap() {
       return ImmutableMap.<String, Long>builder()
+          .put("nanoTime", nanoTime.get())
           .put("put", countPut.get())
           .put("delete", countDelete.get())
           .put("deleteFound", countDeleteFound.get())

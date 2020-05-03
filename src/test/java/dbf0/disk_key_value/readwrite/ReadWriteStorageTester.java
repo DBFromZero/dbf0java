@@ -267,7 +267,7 @@ public class ReadWriteStorageTester<K, V> {
       this.storage = Preconditions.checkNotNull(storage);
     }
 
-    private int size() {
+    private long size() {
       try {
         return storage.size();
       } catch (IOException e) {

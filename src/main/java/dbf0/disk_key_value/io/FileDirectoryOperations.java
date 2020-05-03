@@ -15,4 +15,6 @@ public interface FileDirectoryOperations<S extends OutputStream> {
   void clear() throws IOException;
 
   FileOperations<S> file(String name);
+
+  FileDirectoryOperations<S> subDirectory(String name);
 }

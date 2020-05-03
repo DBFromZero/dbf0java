@@ -29,7 +29,7 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
     return storage.getNode(rootId);
   }
 
-  @Override public int size() {
+  @Override public long size() {
     return getRoot().size();
   }
 

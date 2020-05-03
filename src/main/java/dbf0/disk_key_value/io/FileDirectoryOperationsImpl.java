@@ -31,8 +31,14 @@ public class FileDirectoryOperationsImpl implements FileDirectoryOperations<File
 
 
   @Override public void clear() throws IOException {
-    for (String s : list()) {
-      var child = new File(file, s);
+    clearDirectory(file);
+  }
+
+  private static void clearDirectory(File file) throws IOException {
+    for (var child : file.listFiles()) {
+      if (child.isDirectory()) {
+        clearDirectory(child);
+      }
       if (!child.delete()) {
         throw new IOException("Failed to delete " + child);
       }
@@ -41,5 +47,9 @@ public class FileDirectoryOperationsImpl implements FileDirectoryOperations<File
 
   @Override public FileOperations<FileOutputStream> file(String name) {
     return new FileOperationsImpl(new File(file, name), "-tmp");
+  }
+
+  @Override public FileDirectoryOperationsImpl subDirectory(String name) {
+    return new FileDirectoryOperationsImpl(new File(file, name));
   }
 }
