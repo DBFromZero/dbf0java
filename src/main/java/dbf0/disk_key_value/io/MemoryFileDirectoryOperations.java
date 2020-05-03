@@ -18,12 +18,17 @@ public class MemoryFileDirectoryOperations implements FileDirectoryOperations<Me
   private boolean exists = false;
   private final ConcurrentMap<String, Either<MemoryFileOperations, MemoryFileDirectoryOperations>> children = new ConcurrentHashMap<>();
 
+  public MemoryFileDirectoryOperations() {
+    this("<unnamed>");
+  }
+
   public MemoryFileDirectoryOperations(String name) {
     this.name = name;
   }
 
-  public MemoryFileDirectoryOperations() {
-    this("<unnamed>");
+  public MemoryFileDirectoryOperations(String name, Map<String, Either<MemoryFileOperations, MemoryFileDirectoryOperations>> children) {
+    this(name);
+    this.children.putAll(children);
   }
 
   @Override public String toString() {
