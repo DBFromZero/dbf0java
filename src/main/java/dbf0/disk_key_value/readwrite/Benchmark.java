@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
+import dbf0.common.ReservoirSampler;
 import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
 import dbf0.disk_key_value.io.FileOperationsImpl;
 import dbf0.disk_key_value.io.SerializationHelper;
@@ -21,7 +22,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -75,7 +78,7 @@ public class Benchmark {
       storage.close();
     } catch (Exception e) {
       LOGGER.log(Level.SEVERE, e, () -> "error in closing storage");
-      System.exit(0);
+      System.exit(1);
     }
   }
 
@@ -163,14 +166,17 @@ public class Benchmark {
     return btree;
   }
 
-  private static LsmTree<FileOutputStream> createLsmTree(Iterator<String> argsItr, File directory) throws IOException {
+  private static ReadWriteStorageWithBackgroundTasks<ByteArrayWrapper, ByteArrayWrapper>
+  createLsmTree(Iterator<String> argsItr, File directory) throws IOException {
     var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
     var indexRate = Integer.parseInt(argsItr.next());
-    return createLsmTree(new FileDirectoryOperationsImpl(directory), pendingWritesMergeThreshold, indexRate,
-        Executors.newScheduledThreadPool(4));
+    var executorService = Executors.newScheduledThreadPool(4);
+    return new ReadWriteStorageWithBackgroundTasks<>(
+        createLsmTree(new FileDirectoryOperationsImpl(directory), pendingWritesMergeThreshold, indexRate, executorService),
+        executorService);
   }
 
-  private static HashPartitionedReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper>
+  private static ReadWriteStorageWithBackgroundTasks<ByteArrayWrapper, ByteArrayWrapper>
   createPartitionedLsmTree(Iterator<String> argsItr, File directory) throws IOException {
     var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
     var indexRate = Integer.parseInt(argsItr.next());
@@ -181,9 +187,11 @@ public class Benchmark {
     base.mkdirs();
     base.clear();
 
-    return HashPartitionedReadWriteStorage.create(partitions,
-        partition -> createLsmTree(base.subDirectory(String.valueOf(partition)),
-            pendingWritesMergeThreshold, indexRate, executor));
+    return new ReadWriteStorageWithBackgroundTasks<>(
+        HashPartitionedReadWriteStorage.create(partitions,
+            partition -> createLsmTree(base.subDirectory(String.valueOf(partition)),
+                pendingWritesMergeThreshold, indexRate, executor)),
+        executor);
   }
 
   private static LsmTree<FileOutputStream> createLsmTree(FileDirectoryOperationsImpl directoryOps,
@@ -210,10 +218,10 @@ public class Benchmark {
                                     AtomicReference<Stats> stats, AtomicInteger errors) {
     try {
       var random = new Random();
-      var keyTracker = new KeyTracker(random);
+      var keyTracker = new ReservoirSampler<ByteArrayWrapper>(random);
       Supplier<ByteArrayWrapper> getDelKeyGenerate = () -> {
         var known = (!keyTracker.isEmpty()) && random.nextDouble() < knownKeyRate;
-        return known ? keyTracker.select() : randomKey(random, keySpaceSize);
+        return known ? keyTracker.sample() : randomKey(random, keySpaceSize);
       };
       while (!Thread.interrupted()) {
         var operation = putDeleteGet.select(random);
@@ -261,38 +269,6 @@ public class Benchmark {
     if (file.exists()) {
       var deleted = file.delete();
       Preconditions.checkState(deleted);
-    }
-  }
-
-  // https://en.wikipedia.org/wiki/Reservoir_sampling
-  static class KeyTracker {
-    private final List<ByteArrayWrapper> keys = new ArrayList<>();
-    private final int maxKeys = 10 * 1000;
-    private final Random random;
-    private int keysSeen = 0;
-
-    KeyTracker(Random random) {
-      this.random = random;
-    }
-
-    boolean isEmpty() {
-      return keys.isEmpty();
-    }
-
-    void add(ByteArrayWrapper key) {
-      if (keys.size() <= maxKeys) {
-        keys.add(key);
-      } else {
-        int i = random.nextInt(keysSeen);
-        if (i < keys.size()) {
-          keys.set(i, key);
-        }
-      }
-      keysSeen++;
-    }
-
-    ByteArrayWrapper select() {
-      return keys.get(random.nextInt(keys.size()));
     }
   }
 

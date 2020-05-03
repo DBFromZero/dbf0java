@@ -1,7 +1,6 @@
 package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.google.common.base.Preconditions;
-import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.PositionTrackingStream;
 import dbf0.disk_key_value.io.FileOperations;
@@ -24,7 +23,7 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
   private final boolean isBase;
   private final int delta;
   private final int indexRate;
-  private final Map<ByteArrayWrapper, ByteArrayWrapper> writes;
+  private final PendingWritesAndLog pendingWritesAndLog;
   private final FileOperations<T> fileOperations;
   private final FileOperations<T> indexFileOperations;
   private final DeltaWriterCoordinator<T> coordinator;
@@ -33,7 +32,7 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
                                boolean isBase,
                                int delta,
                                int indexRate,
-                               Map<ByteArrayWrapper, ByteArrayWrapper> writes,
+                               PendingWritesAndLog pendingWritesAndLog,
                                FileOperations<T> fileOperations,
                                FileOperations<T> indexFileOperations,
                                DeltaWriterCoordinator<T> coordinator) {
@@ -41,7 +40,7 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
     this.isBase = isBase;
     this.delta = delta;
     this.indexRate = indexRate;
-    this.writes = writes;
+    this.pendingWritesAndLog = pendingWritesAndLog;
     this.fileOperations = fileOperations;
     this.indexFileOperations = indexFileOperations;
     this.coordinator = coordinator;
@@ -60,8 +59,8 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
     return delta;
   }
 
-  public Map<ByteArrayWrapper, ByteArrayWrapper> getWrites() {
-    return writes;
+  PendingWritesAndLog getPendingWritesAndLog() {
+    return pendingWritesAndLog;
   }
 
   @Override public void run() {
@@ -69,8 +68,8 @@ public class WriteSortedEntriesJob<T extends OutputStream> implements Runnable {
     try {
       Preconditions.checkState(!fileOperations.exists());
       Preconditions.checkState(!indexFileOperations.exists());
-      LOGGER.info(() -> "Sorting " + writes.size() + " writes for " + name);
-      var sortedEntries = new ArrayList<>(writes.entrySet());
+      LOGGER.info(() -> "Sorting " + pendingWritesAndLog.writes.size() + " writes for " + name);
+      var sortedEntries = new ArrayList<>(pendingWritesAndLog.writes.entrySet());
       sortedEntries.sort(Map.Entry.comparingByKey());
 
       overWriter = fileOperations.createOverWriter();

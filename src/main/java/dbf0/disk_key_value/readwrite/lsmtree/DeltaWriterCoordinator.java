@@ -5,13 +5,13 @@ import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.ReadWriteLockHelper;
 import dbf0.disk_key_value.io.FileOperations;
+import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Collections;
 import java.util.LinkedList;
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -31,6 +31,7 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
   private final int maxInFlightWriters;
   private final int indexRate;
   private final ScheduledExecutorService executor;
+  @Nullable private final WriteAheadLog<?> writeAheadLog;
 
   private final LinkedList<WriteSortedEntriesJob<T>> inFlightWriters = new LinkedList<>();
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
@@ -39,7 +40,8 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
   private State state = State.UNINITIALIZED;
 
   public DeltaWriterCoordinator(BaseDeltaFiles<T> baseDeltaFiles, int indexRate, int maxInFlightWriters,
-                                ScheduledExecutorService executor) {
+                                ScheduledExecutorService executor,
+                                @Nullable WriteAheadLog<?> writeAheadLog) {
     Preconditions.checkArgument(indexRate > 0);
     Preconditions.checkArgument(maxInFlightWriters > 1);
     Preconditions.checkArgument(maxInFlightWriters < 100);
@@ -47,6 +49,7 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     this.maxInFlightWriters = maxInFlightWriters;
     this.indexRate = indexRate;
     this.executor = executor;
+    this.writeAheadLog = writeAheadLog;
   }
 
 
@@ -58,9 +61,9 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     return lock.callWithReadLockUnchecked(inFlightWriters::size) == maxInFlightWriters;
   }
 
-  void addWrites(Map<ByteArrayWrapper, ByteArrayWrapper> originalWrites) {
+  void addWrites(PendingWritesAndLog originalWrites) {
     Preconditions.checkState(!hasMaxInFlightWriters());
-    var writes = Collections.unmodifiableMap(originalWrites);
+    var writes = new PendingWritesAndLog(Collections.unmodifiableMap(originalWrites.writes), originalWrites.logWriter);
     lock.runWithWriteLockUnchecked(() -> {
       if (state == State.UNINITIALIZED) {
         if (baseDeltaFiles.hasInUseBase()) {
@@ -88,7 +91,7 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
       var iterator = inFlightWriters.descendingIterator();
       while (iterator.hasNext()) {
         var writer = iterator.next();
-        var value = writer.getWrites().get(key);
+        var value = writer.getPendingWritesAndLog().writes.get(key);
         if (value != null) {
           return value;
         }
@@ -98,11 +101,11 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
   }
 
   private void createWriteJob(boolean isBase, int delta,
-                              Map<ByteArrayWrapper, ByteArrayWrapper> writes,
+                              PendingWritesAndLog writesAndLog,
                               FileOperations<T> fileOperations,
                               FileOperations<T> indexFileOperations) {
     var job = new WriteSortedEntriesJob<>("write" + writersCreated++,
-        isBase, delta, indexRate, writes, fileOperations, indexFileOperations, this);
+        isBase, delta, indexRate, writesAndLog, fileOperations, indexFileOperations, this);
     inFlightWriters.add(job);
     executor.execute(job);
   }
@@ -130,6 +133,11 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
         } else {
           Preconditions.checkState(state == State.WRITE_DELTAS);
           baseDeltaFiles.addDelta(writer.getDelta());
+        }
+        var logWriter = writer.getPendingWritesAndLog().logWriter;
+        if (logWriter != null) {
+          Preconditions.checkState(writeAheadLog != null);
+          writeAheadLog.freeWriter(logWriter.getName());
         }
         var removed = inFlightWriters.remove(writer);
         Preconditions.checkState(removed);
