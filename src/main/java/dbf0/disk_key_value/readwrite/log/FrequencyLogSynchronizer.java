@@ -79,14 +79,15 @@ public class FrequencyLogSynchronizer<T extends OutputStream> implements LogSync
       this.frequency = frequency;
     }
 
-    @Override public LogSynchronizer create(FileOperations<T> fileOperations, T outputStream) throws IOException {
+    @Override
+    public FrequencyLogSynchronizer<T> create(FileOperations<T> fileOperations, T outputStream) throws IOException {
       var synchronizer = new FrequencyLogSynchronizer<T>(fileOperations, outputStream);
       synchronizer.schedule(scheduledExecutorService, frequency);
       return synchronizer;
     }
   }
 
-  public static <T extends OutputStream> LogSynchronizer.Factory<T> factory(
+  public static <T extends OutputStream> Factory<T> factory(
       ScheduledExecutorService scheduledExecutorService, Duration frequency) {
     return new Factory<>(scheduledExecutorService, frequency);
   }
