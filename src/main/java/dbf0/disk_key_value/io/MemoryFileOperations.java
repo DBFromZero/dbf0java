@@ -78,9 +78,15 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
     return currentOutput == null ? 0 : currentOutput.size();
   }
 
+  private static class ByteArrayOutputStreamWrapper extends ByteArrayOutputStream {
+    private ByteArrayInputStream createView() {
+      return new ByteArrayInputStream(buf, 0, count);
+    }
+  }
+
   public static class MemoryOutputStream extends OutputStream {
 
-    private final ByteArrayOutputStream stream = new ByteArrayOutputStream();
+    private final ByteArrayOutputStreamWrapper stream = new ByteArrayOutputStreamWrapper();
 
     @Override public void write(int b) throws IOException {
       stream.write(b);
@@ -95,7 +101,7 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
     }
 
     private ByteArrayInputStream createView() {
-      return new ByteArrayInputStream(stream.toByteArray());
+      return stream.createView();
     }
   }
 
