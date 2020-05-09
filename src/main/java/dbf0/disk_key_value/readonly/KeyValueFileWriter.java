@@ -2,7 +2,7 @@ package dbf0.disk_key_value.readonly;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.PrefixIo;
+import dbf0.common.IOUtil;
 
 import java.io.*;
 
@@ -24,8 +24,8 @@ public class KeyValueFileWriter implements Closeable {
 
   public void append(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
     Preconditions.checkState(outputStream != null, "already closed");
-    PrefixIo.writeBytes(outputStream, key);
-    PrefixIo.writeBytes(outputStream, value);
+    IOUtil.writeBytes(outputStream, key);
+    IOUtil.writeBytes(outputStream, value);
   }
 
   @Override public void close() throws IOException {

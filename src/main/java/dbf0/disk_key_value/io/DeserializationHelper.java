@@ -2,7 +2,7 @@ package dbf0.disk_key_value.io;
 
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.PrefixIo;
+import dbf0.common.IOUtil;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -41,7 +41,7 @@ public class DeserializationHelper {
   }
 
   public ByteArrayWrapper readBytes() throws IOException {
-    return PrefixIo.readBytes(inputStream);
+    return IOUtil.readBytes(inputStream);
   }
 
   private ByteBuffer readByteBuffer(int length) throws IOException {

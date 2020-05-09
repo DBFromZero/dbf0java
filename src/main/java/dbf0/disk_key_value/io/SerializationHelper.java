@@ -1,7 +1,7 @@
 package dbf0.disk_key_value.io;
 
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.PrefixIo;
+import dbf0.common.IOUtil;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -34,7 +34,7 @@ public class SerializationHelper {
   }
 
   public void writeBytes(ByteArrayWrapper w) throws IOException {
-    PrefixIo.writeBytes(outputStream, w);
+    IOUtil.writeBytes(outputStream, w);
   }
 
   public void writeString(String s) throws IOException {

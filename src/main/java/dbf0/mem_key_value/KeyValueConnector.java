@@ -2,7 +2,7 @@ package dbf0.mem_key_value;
 
 import dbf0.base.BaseConnector;
 import dbf0.common.Dbf0Util;
-import dbf0.common.PrefixIo;
+import dbf0.common.IOUtil;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -11,6 +11,12 @@ import java.util.Random;
 import java.util.logging.Logger;
 
 class KeyValueConnector extends BaseConnector {
+
+  // prefixes to identify different types of messages
+  public static final byte SET = (byte) 's';
+  public static final byte GET = (byte) 'g';
+  public static final byte FOUND = (byte) 'f';
+  public static final byte NOT_FOUND = (byte) 'n';
 
   private static final Logger LOGGER = Dbf0Util.getLogger(KeyValueConnector.class);
 
@@ -51,9 +57,9 @@ class KeyValueConnector extends BaseConnector {
     var value = source.generateValueForKey(key);
     LOGGER.finest(() -> "set key " + key + " to " + value);
 
-    s.getOutputStream().write(PrefixIo.SET);
-    PrefixIo.writeBytes(s.getOutputStream(), key);
-    PrefixIo.writeBytes(s.getOutputStream(), value);
+    s.getOutputStream().write(SET);
+    IOUtil.writeBytes(s.getOutputStream(), key);
+    IOUtil.writeBytes(s.getOutputStream(), value);
 
     stats.set.incrementAndGet();
     tracker.trackSetKey(key);
@@ -63,8 +69,8 @@ class KeyValueConnector extends BaseConnector {
     var key = source.generateKey();
     LOGGER.finest(() -> "get key " + key);
 
-    s.getOutputStream().write(PrefixIo.GET);
-    PrefixIo.writeBytes(s.getOutputStream(), key);
+    s.getOutputStream().write(GET);
+    IOUtil.writeBytes(s.getOutputStream(), key);
 
     stats.get.incrementAndGet();
 
@@ -73,9 +79,9 @@ class KeyValueConnector extends BaseConnector {
       case -1:
         LOGGER.warning("unexpected end of stream");
         return;
-      case PrefixIo.FOUND:
+      case FOUND:
         stats.found.incrementAndGet();
-        var readValue = PrefixIo.readBytes(s.getInputStream());
+        var readValue = IOUtil.readBytes(s.getInputStream());
         LOGGER.finest(() -> String.format("found %s=%s", key, readValue));
         var expectedValue = source.generateValueForKey(key);
         if (!readValue.equals(expectedValue)) {
@@ -83,7 +89,7 @@ class KeyValueConnector extends BaseConnector {
               key, expectedValue, readValue));
         }
         break;
-      case PrefixIo.NOT_FOUND:
+      case NOT_FOUND:
         LOGGER.finest("not found");
         if (tracker.expectKeySet(key)) {
           stats.missingKey.incrementAndGet();

@@ -2,8 +2,8 @@ package dbf0.disk_key_value.readonly;
 
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
+import dbf0.common.IOUtil;
 import dbf0.common.IoConsumer;
-import dbf0.common.PrefixIo;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.ByteArrayOutputStream;
@@ -35,7 +35,7 @@ public class ExploreFileCorruption {
 
   private static int serSize(ByteArrayWrapper bw) throws IOException {
     var s = new ByteArrayOutputStream();
-    PrefixIo.writeLength(s, bw.length());
+    IOUtil.writeVariableLengthUnsignedInt(s, bw.length());
     return s.size() + bw.length();
   }
 }

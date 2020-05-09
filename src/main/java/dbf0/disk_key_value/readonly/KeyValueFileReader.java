@@ -3,7 +3,7 @@ package dbf0.disk_key_value.readonly;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.EndOfStream;
-import dbf0.common.PrefixIo;
+import dbf0.common.IOUtil;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
@@ -28,7 +28,7 @@ public class KeyValueFileReader implements Closeable {
     Preconditions.checkState(!haveReadKey);
     ByteArrayWrapper key;
     try {
-      key = PrefixIo.readBytes(inputStream);
+      key = IOUtil.readBytes(inputStream);
     } catch (EndOfStream ignored) {
       return null;
     }
@@ -39,7 +39,7 @@ public class KeyValueFileReader implements Closeable {
   ByteArrayWrapper readValue() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(haveReadKey);
-    var value = PrefixIo.readBytes(inputStream);
+    var value = IOUtil.readBytes(inputStream);
     haveReadKey = false;
     return value;
   }
@@ -47,7 +47,7 @@ public class KeyValueFileReader implements Closeable {
   void skipValue() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(haveReadKey);
-    int length = PrefixIo.readLength(inputStream);
+    int length = IOUtil.readVariableLengthUnsignedInt(inputStream);
     skipBytes(length);
     haveReadKey = false;
   }

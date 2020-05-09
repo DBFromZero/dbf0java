@@ -106,4 +106,12 @@ public class Dbf0Util {
   public static String formatBytes(long bytes) {
     return formatSize(bytes) + "B";
   }
+
+  public static int safeLongToInt(long l) {
+    int i = (int) l;
+    if (i != l) {
+      throw new IllegalArgumentException("Cannot safely convert " + l + " to an integer");
+    }
+    return i;
+  }
 }
