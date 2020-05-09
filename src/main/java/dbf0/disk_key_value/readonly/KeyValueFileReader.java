@@ -3,7 +3,7 @@ package dbf0.disk_key_value.readonly;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.EndOfStream;
-import dbf0.common.IOUtil;
+import dbf0.common.io.IOUtil;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;

@@ -4,7 +4,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.primitives.Ints;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.IOUtil;
+import dbf0.common.io.IOUtil;
 import dbf0.disk_key_value.io.FileDirectoryOperations;
 import org.jetbrains.annotations.NotNull;
 

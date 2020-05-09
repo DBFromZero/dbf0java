@@ -4,7 +4,7 @@ import com.google.common.base.Preconditions;
 import dbf0.base.BaseServer;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.IOUtil;
+import dbf0.common.io.IOUtil;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

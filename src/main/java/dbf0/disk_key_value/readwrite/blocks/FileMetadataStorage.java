@@ -1,9 +1,9 @@
 package dbf0.disk_key_value.readwrite.blocks;
 
 import com.google.common.base.Preconditions;
+import dbf0.disk_key_value.io.DeprecatedSerializationHelper;
+import dbf0.disk_key_value.io.DeprecatedSerializer;
 import dbf0.disk_key_value.io.FileOperations;
-import dbf0.disk_key_value.io.SerializationHelper;
-import dbf0.disk_key_value.io.Serializer;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -18,7 +18,7 @@ public class FileMetadataStorage<T extends OutputStream> implements Closeable {
   private final Map<String, FileMetadataMapWriter<?, ?>> writers = new HashMap<>();
 
   private transient T outputStream;
-  private transient SerializationHelper serializationHelper;
+  private transient DeprecatedSerializationHelper serializationHelper;
   private boolean pauseSync = false;
 
   public FileMetadataStorage(FileOperations<T> fileOperations) {
@@ -28,7 +28,7 @@ public class FileMetadataStorage<T extends OutputStream> implements Closeable {
   public void initialize() throws IOException {
     Preconditions.checkState(outputStream == null, "already initialized");
     outputStream = fileOperations.createAppendOutputStream();
-    serializationHelper = new SerializationHelper(outputStream);
+    serializationHelper = new DeprecatedSerializationHelper(outputStream);
   }
 
   @Override public void close() throws IOException {
@@ -38,7 +38,7 @@ public class FileMetadataStorage<T extends OutputStream> implements Closeable {
     serializationHelper = null;
   }
 
-  public <K, V> MetadataMap<K, V> newMap(String name, Serializer<K> keySerializer, Serializer<V> valueSerializer) {
+  public <K, V> MetadataMap<K, V> newMap(String name, DeprecatedSerializer<K> keySerializer, DeprecatedSerializer<V> valueSerializer) {
     Preconditions.checkState(outputStream != null, "not initialized");
     Preconditions.checkArgument(!writers.containsKey(name), "already have a writer for name %s", name);
 
@@ -67,11 +67,11 @@ public class FileMetadataStorage<T extends OutputStream> implements Closeable {
     private static final byte CLEAR = (byte) 0x30;
 
     private final String name;
-    private final Serializer<K> keySerializer;
-    private final Serializer<V> valueSerializer;
+    private final DeprecatedSerializer<K> keySerializer;
+    private final DeprecatedSerializer<V> valueSerializer;
     private final Map<K, V> map = new HashMap<>();
 
-    public FileMetadataMapWriter(String name, Serializer<K> keySerializer, Serializer<V> valueSerializer) {
+    public FileMetadataMapWriter(String name, DeprecatedSerializer<K> keySerializer, DeprecatedSerializer<V> valueSerializer) {
       this.name = name;
       this.keySerializer = keySerializer;
       this.valueSerializer = valueSerializer;

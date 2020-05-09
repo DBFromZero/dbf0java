@@ -2,7 +2,7 @@ package dbf0.mem_key_value;
 
 import dbf0.base.BaseConnector;
 import dbf0.common.Dbf0Util;
-import dbf0.common.IOUtil;
+import dbf0.common.io.IOUtil;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

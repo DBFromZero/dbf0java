@@ -2,7 +2,7 @@ package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.Dbf0Util;
-import dbf0.common.PositionTrackingStream;
+import dbf0.common.io.PositionTrackingStream;
 import dbf0.disk_key_value.io.FileOperations;
 import dbf0.disk_key_value.readonly.IndexBuilder;
 import dbf0.disk_key_value.readonly.KeyValueFileWriter;

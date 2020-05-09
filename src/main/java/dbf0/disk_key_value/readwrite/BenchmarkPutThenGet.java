@@ -6,8 +6,8 @@ import com.google.gson.Gson;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.IoRunnable;
+import dbf0.disk_key_value.io.DeprecatedSerializationHelper;
 import dbf0.disk_key_value.io.FileOperationsImpl;
-import dbf0.disk_key_value.io.SerializationHelper;
 import dbf0.disk_key_value.io.SerializationPair;
 import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.FileMetadataStorage;
@@ -57,7 +57,7 @@ public class BenchmarkPutThenGet {
     var blockStorage = FileBlockStorage.forFile(file, metadataStore);
     var bTreeStorage = new BlockBTreeStorage<>(
         config,
-        metadataStore.newMap("btree", SerializationHelper::writeLong, SerializationHelper::writeLong),
+        metadataStore.newMap("btree", DeprecatedSerializationHelper::writeLong, DeprecatedSerializationHelper::writeLong),
         blockStorage,
         new NodeSerialization<>(
             config,

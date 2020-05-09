@@ -2,29 +2,30 @@ package dbf0.disk_key_value.io;
 
 import dbf0.common.ByteArrayWrapper;
 
+@Deprecated
 public class SerializationPair<T> {
 
-  private final Serializer<T> serializer;
-  private final Deserializer<T> deserializer;
+  private final DeprecatedSerializer<T> serializer;
+  private final DeprecatedDeserializer<T> deserializer;
 
-  public SerializationPair(Serializer<T> serializer, Deserializer<T> deserializer) {
+  public SerializationPair(DeprecatedSerializer<T> serializer, DeprecatedDeserializer<T> deserializer) {
     this.serializer = serializer;
     this.deserializer = deserializer;
   }
 
-  public Serializer<T> getSerializer() {
+  public DeprecatedSerializer<T> getSerializer() {
     return serializer;
   }
 
-  public Deserializer<T> getDeserializer() {
+  public DeprecatedDeserializer<T> getDeserializer() {
     return deserializer;
   }
 
   public static SerializationPair<Integer> intSerializationPair() {
-    return new SerializationPair<>(Serializer.intSerializer(), Deserializer.intDeserializer());
+    return new SerializationPair<>(DeprecatedSerializer.intSerializer(), DeprecatedDeserializer.intDeserializer());
   }
 
   public static SerializationPair<ByteArrayWrapper> bytesSerializationPair() {
-    return new SerializationPair<>(Serializer.bytesSerializer(), Deserializer.bytesDeserializer());
+    return new SerializationPair<>(DeprecatedSerializer.bytesSerializer(), DeprecatedDeserializer.bytesDeserializer());
   }
 }

@@ -1,4 +1,4 @@
-package dbf0.common;
+package dbf0.common.io;
 
 import org.jetbrains.annotations.NotNull;
 

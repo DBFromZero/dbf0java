@@ -2,8 +2,8 @@ package dbf0.disk_key_value.readonly;
 
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.IOUtil;
 import dbf0.common.IoConsumer;
+import dbf0.common.io.IOUtil;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.ByteArrayOutputStream;

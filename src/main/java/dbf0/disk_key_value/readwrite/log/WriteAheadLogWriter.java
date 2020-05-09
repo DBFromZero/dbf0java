@@ -2,7 +2,7 @@ package dbf0.disk_key_value.readwrite.log;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.IOUtil;
+import dbf0.common.io.IOUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.BufferedOutputStream;

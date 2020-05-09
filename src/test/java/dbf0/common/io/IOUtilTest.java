@@ -1,16 +1,18 @@
-package dbf0.common;
+package dbf0.common.io;
 
+import dbf0.common.ByteArrayWrapper;
+import dbf0.common.EndOfStream;
+import dbf0.common.IoConsumer;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.IntStream;
 
-import static dbf0.common.IOUtil.EIGHTH_BIT_SET;
-import static dbf0.common.IOUtil.LOWER_7BITS_SET;
+import static dbf0.common.io.IOUtil.EIGHTH_BIT_SET;
+import static dbf0.common.io.IOUtil.LOWER_7BITS_SET;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -51,12 +53,6 @@ public class IOUtilTest {
 
   private static void roundTripTest(ByteArrayWrapper bw) throws IOException {
     assertThat(read(write(bw))).isEqualTo(bw);
-  }
-
-  private static void offsetBwEqual(ByteArrayWrapper shorter, ByteArrayWrapper longer, int offset) {
-    assertThat(shorter.getArray().length).isEqualTo(longer.getArray().length - offset);
-    assertThat(Arrays.equals(shorter.getArray(), 0, shorter.getArray().length,
-        longer.getArray(), offset, longer.getArray().length)).isTrue();
   }
 
   private static Random random() {

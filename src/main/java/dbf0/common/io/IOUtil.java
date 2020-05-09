@@ -1,7 +1,10 @@
-package dbf0.common;
+package dbf0.common.io;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import dbf0.common.ByteArrayWrapper;
+import dbf0.common.Dbf0Util;
+import dbf0.common.EndOfStream;
 
 import java.io.IOException;
 import java.io.InputStream;
