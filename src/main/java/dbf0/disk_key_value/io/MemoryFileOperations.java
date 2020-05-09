@@ -5,6 +5,7 @@ package dbf0.disk_key_value.io;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
 
@@ -39,9 +40,13 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
 
   @Override public MemoryOutputStream createAppendOutputStream() {
     if (currentOutput == null) {
-      currentOutput = new MemoryOutputStream();
+      currentOutput = createMemoryOutputStream();
     }
     return currentOutput;
+  }
+
+  @NotNull protected MemoryFileOperations.MemoryOutputStream createMemoryOutputStream() {
+    return new MemoryOutputStream();
   }
 
   @Override public void sync(MemoryOutputStream outputStream) {
@@ -73,19 +78,36 @@ public class MemoryFileOperations implements FileOperations<MemoryFileOperations
     return currentOutput == null ? 0 : currentOutput.size();
   }
 
-  public static class MemoryOutputStream extends ByteArrayOutputStream {
-
-    public MemoryOutputStream() {
-    }
-
+  private static class ByteArrayOutputStreamWrapper extends ByteArrayOutputStream {
     private ByteArrayInputStream createView() {
       return new ByteArrayInputStream(buf, 0, count);
     }
   }
 
+  public static class MemoryOutputStream extends OutputStream {
+
+    private final ByteArrayOutputStreamWrapper stream = new ByteArrayOutputStreamWrapper();
+
+    @Override public void write(int b) throws IOException {
+      stream.write(b);
+    }
+
+    @Override public void write(@NotNull byte[] b, int off, int len) throws IOException {
+      stream.write(b, off, len);
+    }
+
+    public int size() {
+      return stream.size();
+    }
+
+    private ByteArrayInputStream createView() {
+      return stream.createView();
+    }
+  }
+
   class MemoryOverWriter implements OverWriter<MemoryOutputStream> {
 
-    MemoryOutputStream outputStream = new MemoryOutputStream();
+    MemoryOutputStream outputStream = createMemoryOutputStream();
 
     @Override public MemoryOutputStream getOutputStream() {
       Preconditions.checkState(outputStream != null);
