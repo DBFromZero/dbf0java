@@ -42,7 +42,7 @@ import java.util.stream.IntStream;
 
 public class Benchmark {
 
-  private static final Logger LOGGER = Dbf0Util.getLogger(dbf0.disk_key_value.readonly.Benchmark.class);
+  private static final Logger LOGGER = Dbf0Util.getLogger(Benchmark.class);
 
   public static void main(String[] args) throws Exception {
     Preconditions.checkArgument(args.length >= 9);
@@ -255,7 +255,7 @@ public class Benchmark {
                                     AtomicReference<Stats> stats, AtomicInteger errors) {
     try {
       var random = new Random();
-      var keyTracker = new ReservoirSampler<ByteArrayWrapper>(random);
+      var keyTracker = new ReservoirSampler<ByteArrayWrapper>(random, 10 * 1000);
       Supplier<ByteArrayWrapper> getDelKeyGenerate = () -> {
         var known = (!keyTracker.isEmpty()) && random.nextDouble() < knownKeyRate;
         return known ? keyTracker.sample() : randomKey(random, keySpaceSize);

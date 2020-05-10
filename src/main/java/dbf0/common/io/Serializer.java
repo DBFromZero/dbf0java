@@ -28,4 +28,8 @@ public interface Serializer<T> {
     serialize(stream, x);
     return ByteArrayWrapper.of(stream.toByteArray());
   }
+
+  default boolean canBeDeserializedAsByteArrays() {
+    return false;
+  }
 }

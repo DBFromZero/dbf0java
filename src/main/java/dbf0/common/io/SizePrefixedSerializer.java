@@ -36,4 +36,8 @@ public class SizePrefixedSerializer<T> implements Serializer<T> {
     serializer.serialize(buffer, x);
     return buffer;
   }
+
+  @Override public boolean canBeDeserializedAsByteArrays() {
+    return true;
+  }
 }

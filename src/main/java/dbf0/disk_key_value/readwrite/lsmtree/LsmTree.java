@@ -12,6 +12,8 @@ import dbf0.disk_key_value.readwrite.CloseableReadWriteStorage;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageWithBackgroundTasks;
 import dbf0.disk_key_value.readwrite.log.LogConsumer;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
+import dbf0.document.types.DElement;
+import dbf0.document.types.DString;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
@@ -30,8 +32,9 @@ import java.util.logging.Logger;
 public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWriteStorage<K, V> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(LsmTree.class);
-  static final ByteArrayWrapper BYTE_ARRAY_DELETE_VALUE = ByteArrayWrapper.of(
+  public static final ByteArrayWrapper BYTE_ARRAY_DELETE_VALUE = ByteArrayWrapper.of(
       83, 76, 69, 7, 95, 21, 81, 27, 2, 104, 8, 100, 45, 109, 110, 1);
+  public static final DString D_ELEMENT_DELETE_VALUE = new DString("|fxcR/*rwEC\\rMg/^");
 
   public static class Builder<T extends OutputStream, K, V> {
     private int pendingWritesDeltaThreshold = 10 * 1000;
@@ -193,11 +196,18 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
         .withDeleteValue(BYTE_ARRAY_DELETE_VALUE);
   }
 
-
   public static Builder<FileOutputStream, ByteArrayWrapper, ByteArrayWrapper>
   builderForDirectory(FileDirectoryOperations<FileOutputStream> directoryOperations) {
     return LsmTree.<FileOutputStream>builderForBytes()
         .withBaseDeltaFiles(directoryOperations);
+  }
+
+  public static <T extends OutputStream> Builder<T, DElement, DElement> builderForDocuments() {
+    return LsmTree.<T, DElement, DElement>builder()
+        .withKeySerialization(DElement.serializationPair())
+        .withValueSerialization(DElement.sizePrefixedSerializationPair())
+        .withKeyComparator(DElement::compareTo)
+        .withDeleteValue(D_ELEMENT_DELETE_VALUE);
   }
 
   public static Builder<MemoryFileOperations.MemoryOutputStream, ByteArrayWrapper, ByteArrayWrapper> builderForTesting(

@@ -48,6 +48,12 @@ public class HashPartitionedReadWriteStorage<K, V> implements CloseableReadWrite
     this(defaultHashFunction(), partitions);
   }
 
+  @Override public void initialize() throws IOException {
+    for (var partition : partitions) {
+      partition.initialize();
+    }
+  }
+
   @Override public void close() throws IOException {
     for (var partition : partitions) {
       partition.close();
