@@ -115,9 +115,12 @@ public class DElementSerializer implements Serializer<DElement> {
 
   private void serializeUnsignedLong(OutputStream s, DElementSerializationType type, long l) throws IOException {
     int lower4 = ((int) l) & LOWER_4BITS_SET;
-    s.write(type.getSerializationCode() | (lower4 << 4));
-    if ((lower4 & FOURTH_BIT) != 0) {
-      IOUtil.writeVariableLengthUnsignedLong(s, l >> 4);
+    long left = l >>> 4;
+    if (left == 0 && lower4 != LOWER_4BITS_SET) {
+      s.write(type.getSerializationCode() | (lower4 << 4));
+    } else {
+      s.write(type.getSerializationCode() | (LOWER_4BITS_SET << 4));
+      IOUtil.writeVariableLengthUnsignedLong(s, l);
     }
   }
 
@@ -129,6 +132,8 @@ public class DElementSerializer implements Serializer<DElement> {
         return 1;
       case INT:
         return sizeInt((DInt) x);
+      case DECIMAL:
+        return 10;
       case STRING:
         return sizeString((DString) x);
       case ARRAY:

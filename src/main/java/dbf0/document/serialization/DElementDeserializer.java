@@ -14,7 +14,8 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 
-import static dbf0.document.serialization.DElementSerializer.*;
+import static dbf0.document.serialization.DElementSerializer.DEFAULT_CHARSET;
+import static dbf0.document.serialization.DElementSerializer.LOWER_4BITS_SET;
 
 public class DElementDeserializer implements Deserializer<DElement> {
 
@@ -106,11 +107,11 @@ public class DElementDeserializer implements Deserializer<DElement> {
   }
 
   private long deserializeUnsignedLong(InputStream s, int codeAndExtra) throws IOException {
-    long value = codeAndExtra >> 4;
-    if ((value & FOURTH_BIT) == 0) {
+    long value = codeAndExtra >>> 4;
+    if (value != LOWER_4BITS_SET) {
       return value;
     }
-    return (value << 4) + IOUtil.readVariableLengthUnsignedLong(s);
+    return IOUtil.readVariableLengthUnsignedLong(s);
   }
 
   private int deserializeUnsignedInt(InputStream s, int codeAndExtra) throws IOException {

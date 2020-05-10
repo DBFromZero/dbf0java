@@ -21,7 +21,7 @@ public final class DDecimal extends DElement {
   }
 
   @Override public @NotNull DElementType getType() {
-    return DElementType.INT;
+    return DElementType.DECIMAL;
   }
 
   @Override protected int compareToSameType(DElement o) {

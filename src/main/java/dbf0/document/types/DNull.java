@@ -28,4 +28,8 @@ public final class DNull extends DElement {
   @Override public int hashCode() {
     return 0;
   }
+
+  @Override public String toString() {
+    return "DNull";
+  }
 }
