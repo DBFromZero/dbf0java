@@ -64,12 +64,24 @@ public class IOUtil {
   }
 
   public static void readArrayFully(InputStream s, byte[] bs) throws IOException {
-    int i = 0, n;
-    while (i < bs.length && (n = s.read(bs, i, bs.length - i)) != -1) {
-      i += n;
+    int n = s.readNBytes(bs, 0, bs.length);
+    if (n != bs.length) {
+      throw new EndOfStream("Failed to read full message size " + bs.length + ". Only read " + n + " bytes");
     }
-    if (i != bs.length) {
-      throw new EndOfStream("Failed to read full message. Only read " + i + " bytes");
+  }
+
+  public static int sizeUnsignedLong(long l) {
+    return sizeUnsignedLong(l, 0);
+  }
+
+  public static int sizeUnsignedLong(long l, int bitAdjust) {
+    return (int) Math.ceil((double) Math.max(Long.SIZE - Long.numberOfLeadingZeros(l) - bitAdjust, 0) / 7.0);
+  }
+
+  public static void skip(InputStream s, long length) throws IOException {
+    var skipped = s.skip(length);
+    if (skipped != length) {
+      throw new EndOfStream("Intended to skip " + length + " but only skipped " + skipped);
     }
   }
 }

@@ -14,15 +14,25 @@ public class DElementSerializer implements Serializer<DElement> {
 
   static final int LOWER_4BITS_SET = 0xF;
   static final int FOURTH_BIT = 8;
-  static final Charset CHARSET = Charset.defaultCharset();
+  static final Charset DEFAULT_CHARSET = Charset.defaultCharset();
 
-  private static final DElementSerializer INSTANCE = new DElementSerializer();
+  private static final DElementSerializer DEFAULT_CHARSET_INSTANCE = new DElementSerializer(DEFAULT_CHARSET);
 
-  @NotNull public static DElementSerializer getInstance() {
-    return INSTANCE;
+  @NotNull public static DElementSerializer defaultCharsetInstance() {
+    return DEFAULT_CHARSET_INSTANCE;
   }
 
-  private DElementSerializer() {
+  @NotNull public static DElementSerializer forCharset(Charset charset) {
+    return charset.equals(DEFAULT_CHARSET) ? defaultCharsetInstance() : new DElementSerializer(charset);
+  }
+
+  private final Charset charset;
+  private final float estimatedBytesPerChar;
+
+  private DElementSerializer(Charset charset) {
+    this.charset = charset;
+    var encoder = charset.newEncoder();
+    this.estimatedBytesPerChar = Math.max(encoder.averageBytesPerChar(), 0.8F * encoder.maxBytesPerChar());
   }
 
   @Override public void serialize(OutputStream s, DElement x) throws IOException {
@@ -71,7 +81,7 @@ public class DElementSerializer implements Serializer<DElement> {
   }
 
   private void serializeString(OutputStream s, DString x) throws IOException {
-    var bytes = x.getValue().getBytes(CHARSET);
+    var bytes = x.getValue().getBytes(charset);
     serializeUnsignedLong(s, DElementSerializationType.STRING, bytes.length);
     s.write(bytes);
   }
@@ -126,9 +136,8 @@ public class DElementSerializer implements Serializer<DElement> {
   }
 
   private int sizeString(DString x) {
-    // assume the worst case for UTF8, which is two bytes per a character
     var l = x.getValue().length();
-    return sizeUnsignedLong(l) + 2 * l;
+    return sizeUnsignedLong(l) + (int) Math.ceil(estimatedBytesPerChar * l);
   }
 
   private int sizeArray(DArray x) {
@@ -152,6 +161,6 @@ public class DElementSerializer implements Serializer<DElement> {
   }
 
   private int sizeUnsignedLong(long l) {
-    return Math.max(Long.SIZE - Long.numberOfLeadingZeros(l) - 4, 0) / 7 + 1;
+    return IOUtil.sizeUnsignedLong(l, 4) + 1;
   }
 }

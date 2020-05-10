@@ -1,6 +1,7 @@
 package dbf0.common.io;
 
 import dbf0.common.ByteArrayWrapper;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -21,7 +22,7 @@ public interface Serializer<T> {
     return SIZE_UNKNOWN;
   }
 
-  default ByteArrayWrapper serializeToBytes(T x) throws IOException {
+  @NotNull default ByteArrayWrapper serializeToBytes(T x) throws IOException {
     var estimatedSize = estimateSerializedSize(x);
     var stream = new ByteArrayOutputStream(estimatedSize == SIZE_UNKNOWN ? 1024 : estimatedSize);
     serialize(stream, x);

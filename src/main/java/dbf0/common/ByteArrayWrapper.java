@@ -8,7 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Arrays;
 import java.util.Random;
 
-public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
+public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
 
   private final byte[] array;
 

@@ -1,5 +1,6 @@
 package dbf0.document.serialization;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import dbf0.common.Dbf0Util;
 import dbf0.common.EndOfStream;
@@ -10,18 +11,28 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 
 import static dbf0.document.serialization.DElementSerializer.*;
 
 public class DElementDeserializer implements Deserializer<DElement> {
 
-  private static final DElementDeserializer INSTANCE = new DElementDeserializer();
+  private static final DElementDeserializer DEFAULT_CHARSET_INSTANCE = new DElementDeserializer(DEFAULT_CHARSET);
 
-  @NotNull public static DElementDeserializer getInstance() {
-    return INSTANCE;
+
+  @NotNull public static DElementDeserializer defaultCharsetInstance() {
+    return DEFAULT_CHARSET_INSTANCE;
   }
 
-  private DElementDeserializer() {
+  @NotNull public static DElementDeserializer forCharset(Charset charset) {
+    Preconditions.checkNotNull(charset);
+    return charset.equals(DEFAULT_CHARSET) ? defaultCharsetInstance() : new DElementDeserializer(charset);
+  }
+
+  private final Charset charset;
+
+  private DElementDeserializer(Charset charset) {
+    this.charset = charset;
   }
 
   @NotNull @Override public DElement deserialize(InputStream s) throws IOException {
@@ -68,7 +79,7 @@ public class DElementDeserializer implements Deserializer<DElement> {
     int length = deserializeUnsignedInt(s, codeAndExtra);
     var bytes = new byte[length];
     IOUtil.readArrayFully(s, bytes);
-    return DString.of(new String(bytes, CHARSET));
+    return DString.of(new String(bytes, charset));
   }
 
   private DArray deserializeArray(InputStream s, int codeAndExtra) throws IOException {
@@ -124,10 +135,7 @@ public class DElementDeserializer implements Deserializer<DElement> {
         break;
       case STRING:
         var length = deserializeUnsignedLong(s, codeAndExtra);
-        var skipped = s.skip(length);
-        if (skipped != length) {
-          throw new EndOfStream();
-        }
+        IOUtil.skip(s, length);
         break;
       case ARRAY:
         skipN(s, deserializeUnsignedInt(s, codeAndExtra));
