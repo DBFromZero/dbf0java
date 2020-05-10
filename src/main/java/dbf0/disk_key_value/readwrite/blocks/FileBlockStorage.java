@@ -4,6 +4,7 @@ import com.google.common.base.Functions;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import dbf0.common.Dbf0Util;
+import dbf0.common.io.IOUtil;
 import dbf0.common.io.PositionTrackingStream;
 import dbf0.disk_key_value.io.*;
 
@@ -110,7 +111,7 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
 
       // TODO, if block is large enough, return a DeserializationHelper backed by a stream
       var bytes = new byte[length];
-      Dbf0Util.readArrayFully(inputStream, bytes);
+      IOUtil.readArrayFully(inputStream, bytes);
       return new DeserializationHelper(bytes);
     }
   }

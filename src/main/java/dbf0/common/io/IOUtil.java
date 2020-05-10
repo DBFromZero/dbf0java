@@ -59,7 +59,17 @@ public class IOUtil {
   public static ByteArrayWrapper readBytes(InputStream s) throws IOException {
     int length = readVariableLengthUnsignedInt(s);
     var array = new byte[length];
-    Dbf0Util.readArrayFully(s, array);
+    readArrayFully(s, array);
     return new ByteArrayWrapper(array);
+  }
+
+  public static void readArrayFully(InputStream s, byte[] bs) throws IOException {
+    int i = 0, n;
+    while (i < bs.length && (n = s.read(bs, i, bs.length - i)) != -1) {
+      i += n;
+    }
+    if (i != bs.length) {
+      throw new EndOfStream("Failed to read full message. Only read " + i + " bytes");
+    }
   }
 }

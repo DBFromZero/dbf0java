@@ -3,8 +3,6 @@ package dbf0.common;
 import com.google.common.collect.ImmutableList;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Spliterators;
@@ -61,16 +59,6 @@ public class Dbf0Util {
       return callable.call();
     } catch (Exception e) {
       throw new RuntimeException(e);
-    }
-  }
-
-  public static void readArrayFully(InputStream s, byte[] bs) throws IOException {
-    int i = 0, n;
-    while (i < bs.length && (n = s.read(bs, i, bs.length - i)) != -1) {
-      i += n;
-    }
-    if (i != bs.length) {
-      throw new EndOfStream("Failed to read full message. Only read " + i + " bytes");
     }
   }
 
