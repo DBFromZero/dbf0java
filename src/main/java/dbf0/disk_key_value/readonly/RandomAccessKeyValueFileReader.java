@@ -35,23 +35,37 @@ public class RandomAccessKeyValueFileReader<K, V> {
     this.readerSupplier = readerSupplier;
   }
 
-  public static RandomAccessKeyValueFileReader<ByteArrayWrapper, ByteArrayWrapper>
-  forByteArrays(ReadOnlyFileOperations fileOperations, ReadOnlyFileOperations indexFileOperations) throws IOException {
+  public static <K, V> RandomAccessKeyValueFileReader<K, V> open(Deserializer<K> keyDeserializer,
+                                                                 Deserializer<V> valueDeserializer,
+                                                                 Comparator<K> keyComparator,
+                                                                 ReadOnlyFileOperations fileOperations,
+                                                                 ReadOnlyFileOperations indexFileOperations) throws IOException {
     return new RandomAccessKeyValueFileReader<>(
-        readIndex(indexIterator(ByteArrayDeserializer.getInstance(), indexFileOperations.createInputStream())),
-        ByteArrayWrapper::compareTo,
-        readerSupplier(ByteArrayDeserializer.getInstance(), ByteArrayDeserializer.getInstance(), fileOperations)
+        readIndex(indexIterator(keyDeserializer, indexFileOperations.createInputStream()), keyComparator),
+        keyComparator,
+        readerSupplier(keyDeserializer, valueDeserializer, fileOperations)
     );
   }
 
   public static RandomAccessKeyValueFileReader<ByteArrayWrapper, ByteArrayWrapper>
-  forByteArrays(File file, File indexFile) throws IOException {
-    return forByteArrays(new ReadOnlyFileOperationsImpl(file), new ReadOnlyFileOperationsImpl(indexFile));
+  openByteArrays(ReadOnlyFileOperations fileOperations, ReadOnlyFileOperations indexFileOperations) throws IOException {
+    return open(
+        ByteArrayDeserializer.getInstance(),
+        ByteArrayDeserializer.getInstance(),
+        ByteArrayWrapper::compareTo,
+        fileOperations,
+        indexFileOperations
+    );
   }
 
   public static RandomAccessKeyValueFileReader<ByteArrayWrapper, ByteArrayWrapper>
-  forByteArrays(String path, String indexPath) throws IOException {
-    return forByteArrays(new File(path), new File(indexPath));
+  openByteArrays(File file, File indexFile) throws IOException {
+    return openByteArrays(new ReadOnlyFileOperationsImpl(file), new ReadOnlyFileOperationsImpl(indexFile));
+  }
+
+  public static RandomAccessKeyValueFileReader<ByteArrayWrapper, ByteArrayWrapper>
+  openByteArrays(String path, String indexPath) throws IOException {
+    return openByteArrays(new File(path), new File(indexPath));
   }
 
   public static <K, V> IoSupplier<KeyValueFileReader<K, V>> readerSupplier(Deserializer<K> keyDeserializer,

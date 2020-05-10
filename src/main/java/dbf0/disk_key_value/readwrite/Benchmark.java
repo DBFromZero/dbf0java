@@ -228,10 +228,11 @@ public class Benchmark {
         executor);
   }
 
-  private static LsmTree<FileOutputStream> createLsmTree(FileDirectoryOperationsImpl directoryOps,
-                                                         int pendingWritesMergeThreshold, int indexRate,
-                                                         ScheduledExecutorService executorService,
-                                                         @Nullable WriteAheadLog<?> writeAheadLog) throws IOException {
+  private static LsmTree<FileOutputStream, ByteArrayWrapper, ByteArrayWrapper>
+  createLsmTree(FileDirectoryOperationsImpl directoryOps,
+                int pendingWritesMergeThreshold, int indexRate,
+                ScheduledExecutorService executorService,
+                @Nullable WriteAheadLog<?> writeAheadLog) throws IOException {
     directoryOps.mkdirs();
     directoryOps.clear();
 

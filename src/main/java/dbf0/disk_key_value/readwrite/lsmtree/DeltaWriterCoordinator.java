@@ -1,9 +1,9 @@
 package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.google.common.base.Preconditions;
-import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.ReadWriteLockHelper;
+import dbf0.common.io.Serializer;
 import dbf0.disk_key_value.io.FileOperations;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
 import org.jetbrains.annotations.Nullable;
@@ -11,13 +11,14 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class DeltaWriterCoordinator<T extends OutputStream> {
+public class DeltaWriterCoordinator<T extends OutputStream, K, V> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(DeltaWriterCoordinator.class);
 
@@ -27,25 +28,34 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     WRITE_DELTAS
   }
 
-  private final BaseDeltaFiles<T> baseDeltaFiles;
+  private final BaseDeltaFiles<T, K, V> baseDeltaFiles;
   private final int maxInFlightWriters;
   private final int indexRate;
+  private final Serializer<K> keySerializer;
+  private final Serializer<V> valueSerializer;
+  private final Comparator<K> keyComparator;
   private final ScheduledExecutorService executor;
   @Nullable private final WriteAheadLog<?> writeAheadLog;
 
-  private final LinkedList<WriteSortedEntriesJob<T>> inFlightWriters = new LinkedList<>();
+  private final LinkedList<WriteSortedEntriesJob<T, K, V>> inFlightWriters = new LinkedList<>();
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
   private int writersCreated = 0;
   private boolean anyWriteAborted = false;
   private State state = State.UNINITIALIZED;
 
-  public DeltaWriterCoordinator(BaseDeltaFiles<T> baseDeltaFiles, int indexRate, int maxInFlightWriters,
+  public DeltaWriterCoordinator(BaseDeltaFiles<T, K, V> baseDeltaFiles, int indexRate, int maxInFlightWriters,
+                                Serializer<K> keySerializer,
+                                Serializer<V> valueSerializer,
+                                Comparator<K> keyComparator,
                                 ScheduledExecutorService executor,
                                 @Nullable WriteAheadLog<?> writeAheadLog) {
     Preconditions.checkArgument(indexRate > 0);
     Preconditions.checkArgument(maxInFlightWriters > 1);
     Preconditions.checkArgument(maxInFlightWriters < 100);
     this.baseDeltaFiles = Preconditions.checkNotNull(baseDeltaFiles);
+    this.keySerializer = keySerializer;
+    this.valueSerializer = valueSerializer;
+    this.keyComparator = keyComparator;
     this.maxInFlightWriters = maxInFlightWriters;
     this.indexRate = indexRate;
     this.executor = executor;
@@ -64,10 +74,10 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     return !lock.callWithReadLockUnchecked(inFlightWriters::isEmpty);
   }
 
-  void addWrites(PendingWritesAndLog originalWrites) {
+  void addWrites(PendingWritesAndLog<K, V> originalWrites) {
     Preconditions.checkState(!hasMaxInFlightWriters());
     Preconditions.checkState(isUsable());
-    var writes = new PendingWritesAndLog(Collections.unmodifiableMap(originalWrites.writes), originalWrites.logWriter);
+    var writes = new PendingWritesAndLog<>(Collections.unmodifiableMap(originalWrites.writes), originalWrites.logWriter);
     lock.runWithWriteLockUnchecked(() -> {
       if (state == State.UNINITIALIZED) {
         if (baseDeltaFiles.hasInUseBase()) {
@@ -88,7 +98,7 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     });
   }
 
-  @Nullable ByteArrayWrapper searchForKeyInWritesInProgress(ByteArrayWrapper key) {
+  @Nullable V searchForKeyInWritesInProgress(K key) {
     Preconditions.checkState(executor != null, "not initialized");
     return lock.callWithReadLockUnchecked(() -> {
       // search the newest writes first
@@ -105,16 +115,18 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
   }
 
   private void createWriteJob(boolean isBase, int delta,
-                              PendingWritesAndLog writesAndLog,
+                              PendingWritesAndLog<K, V> writesAndLog,
                               FileOperations<T> fileOperations,
                               FileOperations<T> indexFileOperations) {
     var job = new WriteSortedEntriesJob<>("write" + writersCreated++,
-        isBase, delta, indexRate, writesAndLog, fileOperations, indexFileOperations, this);
+        isBase, delta, indexRate,
+        keySerializer, valueSerializer, keyComparator,
+        writesAndLog, fileOperations, indexFileOperations, this);
     inFlightWriters.add(job);
     executor.execute(job);
   }
 
-  void commitWrites(WriteSortedEntriesJob<T> writer) throws IOException {
+  void commitWrites(WriteSortedEntriesJob<T, K, V> writer) throws IOException {
     if (anyWriteAborted) {
       LOGGER.warning("Not committing " + writer.getName() + " since an earlier writer aborted");
       abortWrites(writer);
@@ -135,7 +147,7 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     }
   }
 
-  private void commitWritesWithLogging(WriteSortedEntriesJob<T> writer) {
+  private void commitWritesWithLogging(WriteSortedEntriesJob<T, K, V> writer) {
     try {
       if (state == State.WRITING_BASE) {
         Preconditions.checkState(writer.isBase());
@@ -158,7 +170,7 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     }
   }
 
-  void reattemptCommitWrites(WriteSortedEntriesJob<T> writer, int count) {
+  void reattemptCommitWrites(WriteSortedEntriesJob<T, K, V> writer, int count) {
     LOGGER.info(() -> "Reattempting " + writer.getName() + " count=" + count);
     Preconditions.checkState(!writer.isBase());
     if (state == State.WRITING_BASE) {
@@ -180,7 +192,7 @@ public class DeltaWriterCoordinator<T extends OutputStream> {
     }
   }
 
-  void abortWrites(WriteSortedEntriesJob<T> writer) {
+  void abortWrites(WriteSortedEntriesJob<T, K, V> writer) {
     anyWriteAborted = true;
     LOGGER.warning("Aborting " + writer.getName());
     lock.runWithWriteLockUnchecked(() -> {

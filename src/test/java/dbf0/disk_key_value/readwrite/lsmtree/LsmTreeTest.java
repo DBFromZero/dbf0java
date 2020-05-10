@@ -92,7 +92,7 @@ public class LsmTreeTest {
             .withMaxInFlightWriteJobs(10)
             .withMaxDeltaReadPercentage(0.5)
             .withMergeCronFrequency(Duration.ofMillis(100))
-            .buildWithBackgroundTaks();
+            .buildWithBackgroundTasks();
 
     var initialTree = createLsmTree.get();
     initialTree.initialize();
@@ -129,7 +129,7 @@ public class LsmTreeTest {
                 .withMaxInFlightWriteJobs(10)
                 .withMaxDeltaReadPercentage(0.5)
                 .withMergeCronFrequency(Duration.ofMillis(250))
-                .buildWithBackgroundTaks();
+                .buildWithBackgroundTasks();
 
     var flakingTree = createLsmTree.apply(new MemoryFileDirectoryOperations("flaking",
         Map.of("base", Either.left(new FlakyLengthMemoryFileDirectoryOperations(1000)))));
@@ -159,7 +159,7 @@ public class LsmTreeTest {
     readingTree.close();
   }
 
-  private Pair<MemoryFileDirectoryOperations, LsmTree<MemoryFileOperations.MemoryOutputStream>>
+  private Pair<MemoryFileDirectoryOperations, LsmTree<MemoryFileOperations.MemoryOutputStream, ByteArrayWrapper, ByteArrayWrapper>>
   createLsmTree(int pendingWritesDeltaThreshold) throws IOException {
     var directoryOperations = new MemoryFileDirectoryOperations();
     var tree = LsmTree.builderForTesting(directoryOperations)
@@ -179,7 +179,7 @@ public class LsmTreeTest {
     return d.list().stream().map(d::file).mapToLong(ReadOnlyFileOperations::length).sum();
   }
 
-  private Thread createThread(LsmTree<?> tree,
+  private Thread createThread(LsmTree<?, ByteArrayWrapper, ByteArrayWrapper> tree,
                               PutDeleteGet putDeleteGet, KnownKeyRate knownKeyRate,
                               boolean callback, AtomicInteger errors, MemoryFileDirectoryOperations operations) {
     var builder = ReadWriteStorageTester.builderForBytes(tree, new Random(), 16, 4096)
