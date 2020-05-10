@@ -11,9 +11,10 @@ public enum DElementSerializationType {
   FALSE(3),
   POS_INT(4),
   NEG_INT(5),
-  STRING(6),
-  ARRAY(7),
-  MAP(8);
+  DECIMAL(6),
+  STRING(7),
+  ARRAY(8),
+  MAP(9);
 
   private static Map<Integer, DElementSerializationType> CODE_TO_TYPE;
 

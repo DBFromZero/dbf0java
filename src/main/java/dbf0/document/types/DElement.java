@@ -1,5 +1,10 @@
 package dbf0.document.types;
 
+import dbf0.common.io.SerializationPair;
+import dbf0.common.io.SizePrefixedDeserializer;
+import dbf0.common.io.SizePrefixedSerializer;
+import dbf0.document.serialization.DElementDeserializer;
+import dbf0.document.serialization.DElementSerializer;
 import org.jetbrains.annotations.NotNull;
 
 public abstract class DElement implements Comparable<DElement> {
@@ -18,5 +23,15 @@ public abstract class DElement implements Comparable<DElement> {
       return Integer.compare(thatType.getTypeCode(), thatType.getTypeCode());
     }
     return compareToSameType(o);
+  }
+
+  public static SerializationPair<DElement> serializationPair() {
+    return new SerializationPair<>(DElementSerializer.defaultCharsetInstance(), DElementDeserializer.defaultCharsetInstance());
+  }
+
+  public static SerializationPair<DElement> sizePrefixedSerializationPair() {
+    return new SerializationPair<>(
+        new SizePrefixedSerializer<>(DElementSerializer.defaultCharsetInstance()),
+        new SizePrefixedDeserializer<>(DElementDeserializer.defaultCharsetInstance(), false));
   }
 }

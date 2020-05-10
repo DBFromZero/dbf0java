@@ -11,6 +11,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.nio.charset.Charset;
 
 import static dbf0.document.serialization.DElementSerializer.*;
@@ -64,8 +65,10 @@ public class DElementDeserializer implements Deserializer<DElement> {
         return DInt.of(deserializeUnsignedLong(s, codeAndExtra));
       case NEG_INT:
         return DInt.of(-deserializeUnsignedLong(s, codeAndExtra));
+      case DECIMAL:
+        return DDecimal.of(new BigDecimal(deserializeString(s, codeAndExtra)));
       case STRING:
-        return deserializeString(s, codeAndExtra);
+        return DString.of(deserializeString(s, codeAndExtra));
       case ARRAY:
         return deserializeArray(s, codeAndExtra);
       case MAP:
@@ -75,11 +78,11 @@ public class DElementDeserializer implements Deserializer<DElement> {
     }
   }
 
-  private DString deserializeString(InputStream s, int codeAndExtra) throws IOException {
+  private String deserializeString(InputStream s, int codeAndExtra) throws IOException {
     int length = deserializeUnsignedInt(s, codeAndExtra);
     var bytes = new byte[length];
     IOUtil.readArrayFully(s, bytes);
-    return DString.of(new String(bytes, charset));
+    return new String(bytes, charset);
   }
 
   private DArray deserializeArray(InputStream s, int codeAndExtra) throws IOException {
@@ -133,9 +136,9 @@ public class DElementDeserializer implements Deserializer<DElement> {
       case NEG_INT:
         deserializeUnsignedLong(s, codeAndExtra);
         break;
+      case DECIMAL:
       case STRING:
-        var length = deserializeUnsignedLong(s, codeAndExtra);
-        IOUtil.skip(s, length);
+        IOUtil.skip(s, deserializeUnsignedLong(s, codeAndExtra));
         break;
       case ARRAY:
         skipN(s, deserializeUnsignedInt(s, codeAndExtra));

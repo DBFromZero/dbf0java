@@ -4,9 +4,10 @@ public enum DElementType {
   NULL(1),
   BOOL(2),
   INT(3),
-  STRING(4),
-  ARRAY(5),
-  MAP(6);
+  DECIMAL(4),
+  STRING(5),
+  ARRAY(6),
+  MAP(7);
 
   private final int typeCode;
 

@@ -57,6 +57,9 @@ public class DElementSerializer implements Serializer<DElement> {
       case INT:
         serializeInt(s, (DInt) x);
         break;
+      case DECIMAL:
+        serializeDecimal(s, (DDecimal) x);
+        break;
       case STRING:
         serializeString(s, (DString) x);
         break;
@@ -78,6 +81,12 @@ public class DElementSerializer implements Serializer<DElement> {
     } else {
       serializeUnsignedLong(s, DElementSerializationType.NEG_INT, -value);
     }
+  }
+
+  private void serializeDecimal(OutputStream s, DDecimal x) throws IOException {
+    var bytes = x.getValue().toString().getBytes(charset);
+    serializeUnsignedLong(s, DElementSerializationType.DECIMAL, bytes.length);
+    s.write(bytes);
   }
 
   private void serializeString(OutputStream s, DString x) throws IOException {
