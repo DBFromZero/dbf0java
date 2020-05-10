@@ -2,30 +2,42 @@ package dbf0.disk_key_value.readonly;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.io.IOUtil;
+import dbf0.common.io.ByteArraySerializer;
+import dbf0.common.io.Serializer;
 
 import java.io.*;
 
-public class KeyValueFileWriter implements Closeable {
+public class KeyValueFileWriter<K, V> implements Closeable {
 
   private static final int DEFAULT_BUFFER_SIZE = 0x8000;
 
+  private final Serializer<K> keySerializer;
+  private final Serializer<V> valueSerializer;
+
   private transient OutputStream outputStream;
 
-  public KeyValueFileWriter(OutputStream outputStream) {
+  public KeyValueFileWriter(Serializer<K> keySerializer, Serializer<V> valueSerializer, OutputStream outputStream) {
     Preconditions.checkNotNull(outputStream);
     this.outputStream = outputStream instanceof BufferedOutputStream ? outputStream :
         new BufferedOutputStream(outputStream, DEFAULT_BUFFER_SIZE);
+    this.keySerializer = Preconditions.checkNotNull(keySerializer);
+    this.valueSerializer = Preconditions.checkNotNull(valueSerializer);
   }
 
-  public KeyValueFileWriter(String path) throws IOException {
-    this(new FileOutputStream(path));
+  public static KeyValueFileWriter<ByteArrayWrapper, ByteArrayWrapper> forByteArrays(OutputStream outputStream) {
+    return new KeyValueFileWriter<>(ByteArraySerializer.getInstance(), ByteArraySerializer.getInstance(), outputStream);
   }
 
-  public void append(ByteArrayWrapper key, ByteArrayWrapper value) throws IOException {
+  public static <K, V> KeyValueFileWriter<K, V> forPath(Serializer<K> keySerializer,
+                                                        Serializer<V> valueSerializer,
+                                                        String path) throws IOException {
+    return new KeyValueFileWriter<>(keySerializer, valueSerializer, new FileOutputStream(path));
+  }
+
+  public void append(K key, V value) throws IOException {
     Preconditions.checkState(outputStream != null, "already closed");
-    IOUtil.writeBytes(outputStream, key);
-    IOUtil.writeBytes(outputStream, value);
+    keySerializer.serialize(outputStream, key);
+    valueSerializer.serialize(outputStream, value);
   }
 
   @Override public void close() throws IOException {

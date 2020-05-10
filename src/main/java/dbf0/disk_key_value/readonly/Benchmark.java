@@ -32,10 +32,10 @@ public class Benchmark {
     var readThreads = Integer.parseInt(args[5]);
     var duration = Duration.parse(args[6]);
 
-    var store = new RandomAccessKeyValueFileReader(dataPath, RandomAccessKeyValueFileReader.readIndex(indexPath));
+    var store = RandomAccessKeyValueFileReader.forByteArrays(dataPath, indexPath);
     var random = new Random();
 
-    var allKnownKeys = Dbf0Util.iteratorStream(new KeyOnlyFileIterator(new KeyValueFileReader(knownKeysDataPath)))
+    var allKnownKeys = Dbf0Util.iteratorStream(new KeyOnlyFileIterator<>(KeyValueFileReader.forByteArrays(knownKeysDataPath)))
         .collect(Collectors.toList());
     if (allKnownKeys.size() < keySetSize) {
       throw new RuntimeException("Insufficient known keys. Only " + allKnownKeys.size() +
