@@ -1,5 +1,6 @@
 package dbf0.common.io;
 
+import dbf0.common.ByteArrayWrapper;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -30,6 +31,10 @@ public class SizePrefixedDeserializer<T> implements Deserializer<T> {
 
   @Override public void skipDeserialize(InputStream s) throws IOException {
     IOUtil.skip(s, IOUtil.readVariableLengthUnsignedInt(s));
+  }
+
+  @NotNull @Override public T deserialize(ByteArrayWrapper w) throws IOException {
+    return deserializer.deserialize(w);
   }
 
   private static class StreamView extends InputStream {

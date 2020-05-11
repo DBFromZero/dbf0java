@@ -400,15 +400,28 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
   private void waitForWritesToUnblock() throws IOException {
     LOGGER.warning("There are too many in-flight write jobs. Waiting for them to finish");
     try {
-      while (coordinator.hasMaxInFlightWriters() && coordinator.isUsable()) {
-        synchronized (coordinator) {
-          coordinator.wait();
+      boolean exit;
+      do {
+        while (coordinator.hasMaxInFlightWriters() && coordinator.isUsable()) {
+          synchronized (coordinator) {
+            coordinator.wait();
+          }
         }
-      }
+        exit = lock.callWithWriteLock(() -> {
+          if (!coordinator.isUsable()) {
+            return true;
+          }
+          if (coordinator.hasMaxInFlightWriters()) {
+            return false;
+          }
+          sendWritesToCoordinator();
+          createNewPendingWrites();
+          return true;
+        });
+      } while (!exit);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new InterruptedExceptionWrapper("interrupted waiting for write jobs to finish");
     }
-    lock.runWithWriteLock(this::sendWritesToCoordinator);
   }
 }

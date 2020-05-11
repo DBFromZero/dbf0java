@@ -178,7 +178,7 @@ public class LsmTreeTest {
         .builder(tree)
         .knownKeySupplier(() -> randomDString(random, 4))
         .unknownKeySupplier(() -> randomDString(random, 5))
-        .valueSupplier(() -> randomDString(random, 128))
+        .valueSupplier(() -> randomDString(random, random.nextInt(2000)))
         .random(random)
         .debug(false)
         .checkDeleteReturnValue(false)
@@ -190,7 +190,7 @@ public class LsmTreeTest {
       }
     });
     var tester = builder.build();
-    tester.testPutDeleteGet(10 * 1000, PutDeleteGet.BALANCED, KnownKeyRate.MID);
+    tester.testPutDeleteGet(20 * 1000, PutDeleteGet.BALANCED, KnownKeyRate.MID);
   }
 
   private DString randomDString(Random random, int bytes) {

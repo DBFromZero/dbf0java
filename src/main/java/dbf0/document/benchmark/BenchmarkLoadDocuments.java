@@ -2,6 +2,7 @@ package dbf0.document.benchmark;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.gson.Gson;
 import dbf0.common.Dbf0Util;
 import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
 import dbf0.disk_key_value.readwrite.HashPartitionedReadWriteStorage;
@@ -13,7 +14,13 @@ import dbf0.document.types.DElement;
 import dbf0.document.types.DMap;
 import dbf0.document.types.DString;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,10 +40,12 @@ public class BenchmarkLoadDocuments {
     Dbf0Util.enableConsoleLogging(Level.FINE, true);
 
     var argsItr = Arrays.asList(args).iterator();
+    var readFile = new File(argsItr.next());
     var directory = new File(argsItr.next());
     var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
     var indexRate = Integer.parseInt(argsItr.next());
     var partitions = Integer.parseInt(argsItr.next());
+    var readingThreadCount = Integer.parseInt(argsItr.next());
     var writingThreadsCount = Integer.parseInt(argsItr.next());
     Preconditions.checkState(!argsItr.hasNext());
 
@@ -44,7 +53,7 @@ public class BenchmarkLoadDocuments {
     base.mkdirs();
     base.clear();
 
-    var executor = Executors.newScheduledThreadPool(8);
+    var executor = Executors.newScheduledThreadPool(30);
     var store = new ReadWriteStorageWithBackgroundTasks<>(
         HashPartitionedReadWriteStorage.create(partitions,
             partition -> createLsmTree(base.subDirectory(String.valueOf(partition)),
@@ -61,19 +70,28 @@ public class BenchmarkLoadDocuments {
     var reportFuture = executor.scheduleWithFixedDelay(() -> report(errors, writes, directory, startTime),
         0, 1, TimeUnit.SECONDS);
 
-    var readThread = new Thread(() -> readQueue(errors, queue));
-    readThread.start();
+    var readOffset = readFile.length() / readingThreadCount;
+
+    var readThreads = IntStream.range(0, readingThreadCount)
+        .mapToObj(i -> new Thread(() -> readQueue(errors, readFile, i * readOffset,
+            (i + 1) * readOffset, queue), "read-" + i))
+        .collect(Collectors.toList());
+    readThreads.forEach(Thread::start);
 
     var writeThreads = IntStream.range(0, writingThreadsCount)
-        .mapToObj(ignored -> new Thread(() -> write(errors, readDone, writes, queue, store)))
+        .mapToObj(i -> new Thread(() -> write(errors, readDone, writes, queue, store), "write-" + i))
         .collect(Collectors.toList());
     writeThreads.forEach(Thread::start);
 
-    var threads = new ArrayList<>(writeThreads);
-    threads.add(readThread);
+    var threads = new ArrayList<>(readThreads);
+    threads.addAll(writeThreads);
 
-    while (errors.get() == 0 && readThread.isAlive()) {
-      readThread.join(1000L);
+    while (errors.get() == 0 && readThreads.stream().anyMatch(Thread::isAlive)) {
+      for (Thread readThread : readThreads) {
+        if (readThread.isAlive()) {
+          readThread.join(200L);
+        }
+      }
     }
     readDone.set(true);
 
@@ -107,22 +125,32 @@ public class BenchmarkLoadDocuments {
         .withPendingWritesDeltaThreshold(pendingWritesMergeThreshold)
         .withScheduledExecutorService(executorService)
         .withIndexRate(indexRate)
-        .withMaxInFlightWriteJobs(20)
+        .withMaxInFlightWriteJobs(3)
         .withMaxDeltaReadPercentage(0.75)
         .withMergeCronFrequency(Duration.ofSeconds(1))
         .build();
   }
 
-  private static void readQueue(AtomicInteger errors, BlockingQueue<String> queue) {
-    try {
-      var reader = new BufferedReader(new InputStreamReader(System.in), 0x8000);
+  private static void readQueue(AtomicInteger errors, File file, long start, long end, BlockingQueue<String> queue) {
+    try (var channel = FileChannel.open(file.toPath())) {
+      var result = channel.position(start);
+      Preconditions.checkState(result == channel);
+      var reader = new BufferedReader(Channels.newReader(channel, StandardCharsets.UTF_8));
+      if (start != 0) {
+        reader.readLine();
+      }
+      int i = 0;
       while (errors.get() == 0) {
+        if (i++ % 10 == 0 && channel.position() > end) {
+          break;
+        }
         var line = reader.readLine();
         if (line == null) {
           break;
         }
         queue.put(line);
       }
+    } catch (InterruptedException ignored) {
     } catch (Exception e) {
       errors.incrementAndGet();
       LOGGER.log(Level.SEVERE, e, () -> "Error in reading input");
@@ -168,8 +196,8 @@ public class BenchmarkLoadDocuments {
         .put("writes", writesValue)
         .put("size", size)
         .build();
-    System.out.println(stats);
-    LOGGER.info(String.format("%s writes=%.1e size=%s",
+    System.out.println(new Gson().toJson(stats));
+    LOGGER.info(String.format("%s writes=%.3e size=%s",
         Duration.ofNanos(time - startTime),
         (double) writesValue,
         Dbf0Util.formatBytes(size)));

@@ -10,13 +10,14 @@ import java.io.OutputStream;
 public class SizePrefixedSerializer<T> implements Serializer<T> {
 
   private final Serializer<T> serializer;
+  private final ThreadLocal<ByteArrayOutputStream> outputStream = ThreadLocal.withInitial(() -> new ByteArrayOutputStream(2048));
 
   public SizePrefixedSerializer(Serializer<T> serializer) {
     this.serializer = serializer;
   }
 
   @Override public void serialize(OutputStream s, T x) throws IOException {
-    ByteArrayOutputStream buffer = serializeToBuffer(x);
+    var buffer = serializeToBuffer(x);
     IOUtil.writeVariableLengthUnsignedInt(s, buffer.size());
     buffer.writeTo(s);
   }
@@ -26,13 +27,14 @@ public class SizePrefixedSerializer<T> implements Serializer<T> {
     return estimatedSize == SIZE_UNKNOWN ? SIZE_UNKNOWN : IOUtil.sizeUnsignedLong(estimatedSize) + estimatedSize;
   }
 
+  // Exclude length prefix when serializing directly to bytes
   @NotNull @Override public ByteArrayWrapper serializeToBytes(T x) throws IOException {
     return ByteArrayWrapper.of(serializeToBuffer(x).toByteArray());
   }
 
   @NotNull private ByteArrayOutputStream serializeToBuffer(T x) throws IOException {
-    int estimatedSize = serializer.estimateSerializedSize(x);
-    var buffer = new ByteArrayOutputStream(estimatedSize == SIZE_UNKNOWN ? 1024 : estimatedSize);
+    var buffer = outputStream.get();
+    buffer.reset();
     serializer.serialize(buffer, x);
     return buffer;
   }
