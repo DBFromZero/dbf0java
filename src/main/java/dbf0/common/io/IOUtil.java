@@ -79,9 +79,12 @@ public class IOUtil {
   }
 
   public static void skip(InputStream s, long length) throws IOException {
-    var skipped = s.skip(length);
-    if (skipped != length) {
-      throw new EndOfStream("Intended to skip " + length + " but only skipped " + skipped);
+    while (length > 0) {
+      var skipped = s.skip(length);
+      if (skipped == 0) {
+        throw new EndOfStream("Intended to skip " + length + " but only skipped " + skipped);
+      }
+      length -= skipped;
     }
   }
 }

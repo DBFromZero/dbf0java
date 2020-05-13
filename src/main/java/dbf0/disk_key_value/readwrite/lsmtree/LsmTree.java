@@ -371,6 +371,11 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
     return true;// doesn't actually return a useful value
   }
 
+  public void waitForAllDeltasToMerge() throws InterruptedException {
+    Preconditions.checkState(isUsable());
+    mergerCron.waitForAllDeltasToMerge();
+  }
+
   // only to be called when holding the write lock
   private boolean checkMergeThreshold() throws IOException {
     if (pendingWrites.writes.size() < pendingWritesDeltaThreshold) {

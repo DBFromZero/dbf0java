@@ -10,7 +10,8 @@ import java.io.OutputStream;
 public class SizePrefixedSerializer<T> implements Serializer<T> {
 
   private final Serializer<T> serializer;
-  private final ThreadLocal<ByteArrayOutputStream> outputStream = ThreadLocal.withInitial(() -> new ByteArrayOutputStream(2048));
+  private final ThreadLocal<ByteArrayOutputStream> outputStream =
+      ThreadLocal.withInitial(() -> new ByteArrayOutputStream(2048));
 
   public SizePrefixedSerializer(Serializer<T> serializer) {
     this.serializer = serializer;

@@ -24,11 +24,11 @@ public class ReservoirSampler<T> {
   }
 
   public void add(T x) {
-    if (sample.size() <= maxElements) {
+    if (sample.size() < maxElements) {
       sample.add(x);
     } else {
       int i = random.nextInt(seen);
-      if (i < sample.size()) {
+      if (i < maxElements) {
         sample.set(i, x);
       }
     }

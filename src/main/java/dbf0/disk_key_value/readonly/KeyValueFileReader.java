@@ -43,7 +43,7 @@ public class KeyValueFileReader<K, V> implements Closeable {
         new BufferedInputStream(stream, 0x4000));
   }
 
-  @Nullable K readKey() throws IOException {
+  @Nullable public K readKey() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(!haveReadKey);
     K key;
@@ -56,7 +56,7 @@ public class KeyValueFileReader<K, V> implements Closeable {
     return key;
   }
 
-  V readValue() throws IOException {
+  public V readValue() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(haveReadKey);
     V value = valueDeserializer.deserialize(inputStream);
@@ -64,7 +64,7 @@ public class KeyValueFileReader<K, V> implements Closeable {
     return value;
   }
 
-  void skipValue() throws IOException {
+  public void skipValue() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(haveReadKey);
     valueDeserializer.skipDeserialize(inputStream);

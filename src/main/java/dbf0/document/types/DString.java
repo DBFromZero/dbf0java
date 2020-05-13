@@ -19,6 +19,10 @@ public final class DString extends DElement {
     return value;
   }
 
+  public int length() {
+    return value.length();
+  }
+
   @Override public @NotNull DElementType getType() {
     return DElementType.STRING;
   }

@@ -1,5 +1,7 @@
 package dbf0.disk_key_value.io;
 
+import com.google.common.base.MoreObjects;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -51,5 +53,12 @@ public class FileDirectoryOperationsImpl implements FileDirectoryOperations<File
 
   @Override public FileDirectoryOperationsImpl subDirectory(String name) {
     return new FileDirectoryOperationsImpl(new File(file, name));
+  }
+
+  @Override public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("file", file)
+        .add("exists", exists())
+        .toString();
   }
 }

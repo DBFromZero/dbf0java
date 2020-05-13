@@ -13,6 +13,7 @@ import dbf0.document.gson.DElementTypeAdapter;
 import dbf0.document.types.DElement;
 import dbf0.document.types.DMap;
 import dbf0.document.types.DString;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -55,9 +56,7 @@ public class BenchmarkLoadDocuments {
 
     var executor = Executors.newScheduledThreadPool(30);
     var store = new ReadWriteStorageWithBackgroundTasks<>(
-        HashPartitionedReadWriteStorage.create(partitions,
-            partition -> createLsmTree(base.subDirectory(String.valueOf(partition)),
-                pendingWritesMergeThreshold, indexRate, executor)),
+        createStore(pendingWritesMergeThreshold, indexRate, partitions, base, executor),
         executor);
     store.initialize();
 
@@ -113,12 +112,19 @@ public class BenchmarkLoadDocuments {
     System.exit(errors.get() == 0 ? 0 : 1);
   }
 
-  private static LsmTree<FileOutputStream, DElement, DElement>
+  @NotNull static HashPartitionedReadWriteStorage<DElement, DElement>
+  createStore(int pendingWritesMergeThreshold, int indexRate, int partitions,
+              FileDirectoryOperationsImpl base, ScheduledExecutorService executor) throws IOException {
+    return HashPartitionedReadWriteStorage.create(partitions,
+        partition -> createLsmTree(base.subDirectory(String.valueOf(partition)),
+            pendingWritesMergeThreshold, indexRate, executor));
+  }
+
+  @NotNull static LsmTree<FileOutputStream, DElement, DElement>
   createLsmTree(FileDirectoryOperationsImpl directoryOperations,
                 int pendingWritesMergeThreshold, int indexRate,
                 ScheduledExecutorService executorService) throws IOException {
     directoryOperations.mkdirs();
-    directoryOperations.clear();
 
     return LsmTree.<FileOutputStream>builderForDocuments()
         .withBaseDeltaFiles(directoryOperations)

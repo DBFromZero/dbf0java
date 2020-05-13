@@ -1,7 +1,6 @@
 package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import dbf0.common.Dbf0Util;
 import dbf0.common.io.*;
@@ -89,6 +88,22 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
       checkFuture = null;
     }
     shutdown = true;
+  }
+
+  public void waitForAllDeltasToMerge() throws InterruptedException {
+    Preconditions.checkState(started && !hasError);
+    var monitor = new Object();
+    var future = executor.scheduleWithFixedDelay(() -> {
+      if (baseDeltaFiles.getOrderedDeltasInUse().isEmpty()) {
+        synchronized (monitor) {
+          monitor.notify();
+        }
+      }
+    }, 0, 100, TimeUnit.MILLISECONDS);
+    synchronized (monitor) {
+      monitor.wait();
+      future.cancel(false);
+    }
   }
 
   private void checkForDeltas() {
@@ -179,14 +194,14 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
 
     // order readers as base and the deltas in descending age such that we prefer that last
     // entry for a single key
-    var orderedReaders = Lists.newArrayList(batchReader(baseOperations, valueSerialization.getDeserializer()));
-    for (var deltaPair : orderedDeltaOpsForMerge) {
-      orderedReaders.add(batchReader(deltaPair.getRight(), valueSerialization.getDeserializer()));
-    }
-    var selectedIterator = ValueSelectorIterator.createSortedAndSelectedIterator(orderedReaders, keyComparator);
-
+    var orderedReaders = new ArrayList<KeyValueFileReader<K, X>>(1 + orderedDeltaOpsForMerge.size());
     FileOperations.OverWriter<T> baseOverWriter = null, baseIndexOverWriter = null;
     try {
+      orderedReaders.add(batchReader(baseOperations, valueSerialization.getDeserializer()));
+      for (var deltaPair : orderedDeltaOpsForMerge) {
+        orderedReaders.add(batchReader(deltaPair.getRight(), valueSerialization.getDeserializer()));
+      }
+      var selectedIterator = ValueSelectorIterator.createSortedAndSelectedIterator(orderedReaders, keyComparator);
       baseOverWriter = baseOperations.createOverWriter();
       baseIndexOverWriter = baseIndexOperations.createOverWriter();
       try (var outputStream = new PositionTrackingStream(baseOverWriter.getOutputStream(), BUFFER_SIZE)) {
@@ -216,15 +231,14 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
   }
 
   private <X> void writeMerged(ValueSelectorIterator<K, X> selectedIterator, PositionTrackingStream outputStream,
-                               KeyValueFileWriter<K, Long> indexWriter,
-                               Serializer<X> valueSerialize,
+                               KeyValueFileWriter<K, Long> indexWriter, Serializer<X> valueSerialize,
                                X deleteValueX) throws IOException, ShutdownWhileMerging {
     var indexBuilder = IndexBuilder.indexBuilder(indexWriter, baseIndexRate);
     long i = 0, count = 0;
     var writer = new KeyValueFileWriter<>(keySerialization.getSerializer(), valueSerialize,
         outputStream);
     while (selectedIterator.hasNext()) {
-      if (i % 10000 == 0) {
+      if (i++ % 50000 == 0) {
         if (shutdown) {
           throw new ShutdownWhileMerging();
         }
@@ -232,9 +246,10 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
           Thread.currentThread().interrupt();
           throw new RuntimeException("interrupted while merging. aborting for fast exit");
         }
-        LOGGER.finer("writing merged entry " + i);
+        if (LOGGER.isLoggable(Level.FINER)) {
+          LOGGER.finer("writing merged entry " + i + " at " + Dbf0Util.formatSize(outputStream.getPosition()));
+        }
       }
-      i++;
       var entry = selectedIterator.next();
       if (!entry.getValue().equals(deleteValueX)) {
         indexBuilder.accept(outputStream.getPosition(), entry.getKey());
@@ -242,7 +257,8 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
         count++;
       }
     }
-    LOGGER.fine("wrote " + count + " key/value pairs to new base");
+    LOGGER.fine("wrote " + count + " key/value pairs to new base with size " +
+        Dbf0Util.formatSize(outputStream.getPosition()));
   }
 
   private <X> KeyValueFileReader<K, X> batchReader(FileOperations<T> baseIndexFileOperations,
