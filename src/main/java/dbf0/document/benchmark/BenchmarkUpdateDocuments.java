@@ -4,21 +4,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import dbf0.common.Dbf0Util;
-import dbf0.common.EndOfStream;
 import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
 import dbf0.disk_key_value.readwrite.ReadWriteStorage;
-import dbf0.document.serialization.DElementDeserializer;
 import dbf0.document.types.DElement;
+import dbf0.document.types.DInt;
+import dbf0.document.types.DMap;
 import dbf0.document.types.DString;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
-import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -29,10 +24,11 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static dbf0.document.benchmark.BenchmarkGetDocuments.loadKeys;
 import static dbf0.document.benchmark.BenchmarkLoadDocuments.fileSize;
 
-public class BenchmarkGetDocuments {
-  private static final Logger LOGGER = Dbf0Util.getLogger(BenchmarkGetDocuments.class);
+public class BenchmarkUpdateDocuments {
+  private static final Logger LOGGER = Dbf0Util.getLogger(BenchmarkUpdateDocuments.class);
 
 
   public static void main(String[] args) throws Exception {
@@ -42,9 +38,10 @@ public class BenchmarkGetDocuments {
     var directory = new File(argsItr.next());
     var keysPath = new File(argsItr.next());
     var partitions = Integer.parseInt(argsItr.next());
+    var pendingWritesMergeThreshold = Integer.parseInt(argsItr.next());
     var indexRate = Integer.parseInt(argsItr.next());
     var coreThreads = Integer.parseInt(argsItr.next());
-    var getThreads = Integer.parseInt(argsItr.next());
+    var updateThreads = Integer.parseInt(argsItr.next());
     var duration = Duration.parse(argsItr.next());
     Preconditions.checkState(!argsItr.hasNext());
     Preconditions.checkState(directory.isDirectory());
@@ -53,42 +50,28 @@ public class BenchmarkGetDocuments {
     var executor = Executors.newScheduledThreadPool(coreThreads);
     try {
       ArrayList<DString> keys = loadKeys(keysPath);
-      runGets(directory, partitions, indexRate, getThreads, duration, keys, executor);
+      runUpdates(directory, pendingWritesMergeThreshold, partitions, indexRate, updateThreads, duration, keys, executor);
     } finally {
       executor.shutdown();
       executor.awaitTermination(10, TimeUnit.SECONDS);
     }
   }
 
-  @NotNull static ArrayList<DString> loadKeys(File keysPath) throws IOException {
-    LOGGER.info("Loading keys");
-    var keys = new ArrayList<DString>(10000);
-    try (var stream = SampleKeys.createInputStream(keysPath)) {
-      var deserializer = DElementDeserializer.defaultCharsetInstance();
-      while (true) {
-        keys.add((DString) deserializer.deserialize(stream));
-      }
-    } catch (EndOfStream ignored) {
-    }
-    LOGGER.info("Loaded " + keys.size());
-    return keys;
-  }
-
-  private static void runGets(File directory, int partitions, int indexRate, int getThreads, Duration duration,
-                              List<DString> keys,
-                              ScheduledExecutorService executor) throws Exception {
-    try (var store = BenchmarkLoadDocuments.createStore(100000, indexRate, partitions,
+  private static void runUpdates(File directory, int pendingWritesMergeThreshold, int partitions, int indexRate, int updateThreads, Duration duration,
+                                 List<DString> keys,
+                                 ScheduledExecutorService executor) throws Exception {
+    try (var store = BenchmarkLoadDocuments.createStore(pendingWritesMergeThreshold, indexRate, partitions,
         new FileDirectoryOperationsImpl(directory), executor)) {
       store.initialize();
       var error = new AtomicBoolean(false);
       var done = new AtomicBoolean(false);
-      var gets = new AtomicLong(0);
-      var threads = IntStream.range(0, getThreads).mapToObj(i -> new Thread(() -> getThread(error, done, gets, keys, store)))
+      var updates = new AtomicLong(0);
+      var threads = IntStream.range(0, updateThreads).mapToObj(i -> new Thread(() -> updateThread(error, done, updates, keys, store)))
           .collect(Collectors.toList());
 
       var startTime = System.nanoTime();
       var doneFuture = executor.schedule(() -> done.set(true), duration.toMillis(), TimeUnit.MILLISECONDS);
-      var reportFuture = executor.scheduleWithFixedDelay(() -> report(error, gets, directory, startTime),
+      var reportFuture = executor.scheduleWithFixedDelay(() -> report(error, updates, directory, startTime),
           0, 1, TimeUnit.SECONDS);
       threads.forEach(Thread::start);
 
@@ -108,32 +91,33 @@ public class BenchmarkGetDocuments {
         thread.join();
       }
 
-      report(error, gets, directory, startTime);
+      report(error, updates, directory, startTime);
     }
   }
 
-  private static void report(AtomicBoolean error, AtomicLong atomicGets,
+  private static void report(AtomicBoolean error, AtomicLong atomicUpdates,
                              File directory, long startTime) {
     if (error.get()) {
       return;
     }
     var time = System.nanoTime();
     var size = fileSize(directory);
-    var gets = Math.max(0L, atomicGets.get());
+    var updates = Math.max(0L, atomicUpdates.get());
     var stats = ImmutableMap.<String, Object>builder()
         .put("time", time)
-        .put("gets", gets)
+        .put("updates", updates)
         .put("size", size)
         .build();
     System.out.println(new Gson().toJson(stats));
-    LOGGER.info(String.format("%s gets=%.3e size=%s",
+    LOGGER.info(String.format("%s updates=%.3e size=%s",
         Duration.ofNanos(time - startTime),
-        (double) gets,
+        (double) updates,
         Dbf0Util.formatBytes(size)));
   }
 
-  private static void getThread(AtomicBoolean error, AtomicBoolean done, AtomicLong gets, List<DString> keys,
-                                ReadWriteStorage<DElement, DElement> store) {
+  private static void updateThread(AtomicBoolean error, AtomicBoolean done, AtomicLong updates, List<DString> keys,
+                                   ReadWriteStorage<DElement, DElement> store) {
+    var scoreKey = DString.of("score");
     try {
       var random = new Random();
       while (!error.get() && !done.get()) {
@@ -142,10 +126,17 @@ public class BenchmarkGetDocuments {
         if (value == null) {
           throw new RuntimeException("No value for " + key);
         }
-        gets.getAndIncrement();
+        var map = (DMap) value;
+        var hash = new HashMap<>(map.getEntries());
+        var score = (DInt) hash.get(scoreKey);
+        Preconditions.checkNotNull(score);
+        hash.put(scoreKey, DInt.of(score.getValue() + 1));
+        var updated = DMap.of(hash);
+        store.put(key, updated);
+        updates.getAndIncrement();
       }
     } catch (Exception e) {
-      LOGGER.log(Level.SEVERE, "Error in get", e);
+      LOGGER.log(Level.SEVERE, "Error in update", e);
       error.set(true);
     }
   }
