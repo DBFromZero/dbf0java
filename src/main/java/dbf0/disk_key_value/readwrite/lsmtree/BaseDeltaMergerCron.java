@@ -143,9 +143,9 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
         " max delta size " + Dbf0Util.formatBytes(maxDeltaSize));
 
     var orderedDeltaOpsForMerge = collectDeltaOpsForMerge(orderedDeltasInUse, maxDeltaSize);
-    if (valueSerialization.getSerializer().canBeDeserializedAsByteArrays()) {
+    if (valueSerialization.getSerializer().isByteArrayEquivalent()) {
       // optimization to avoid de-serializing values when the value is size prefixed
-      mergeDeltasAndCommit(orderedDeltaOpsForMerge, SerializationPair.forByteArrays(),
+      mergeDeltasAndCommit(orderedDeltaOpsForMerge, ByteArraySerializer.serializationPair(),
           valueSerialization.getSerializer().serializeToBytes(deleteValue));
     } else {
       mergeDeltasAndCommit(orderedDeltaOpsForMerge, valueSerialization, deleteValue);

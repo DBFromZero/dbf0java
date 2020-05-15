@@ -50,21 +50,18 @@ public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
     return array;
   }
 
-  @Override
-  public boolean equals(Object o) {
+  @Override public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     ByteArrayWrapper that = (ByteArrayWrapper) o;
     return Arrays.equals(array, that.array);
   }
 
-  @Override
-  public int hashCode() {
+  @Override public int hashCode() {
     return Arrays.hashCode(array);
   }
 
-  @Override
-  public int compareTo(@NotNull ByteArrayWrapper o) {
+  @Override public int compareTo(@NotNull ByteArrayWrapper o) {
     return Arrays.compare(array, o.array);
   }
 
@@ -78,7 +75,7 @@ public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
 
   @Override
   public String toString() {
-    if (length() <= 16) {
+    if (length() <= 8) {
       return Hex.encodeHexString(array);
     } else {
       return MoreObjects.toStringHelper(this)

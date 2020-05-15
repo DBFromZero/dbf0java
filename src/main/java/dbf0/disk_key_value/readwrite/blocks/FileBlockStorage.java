@@ -139,7 +139,7 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
 
   private void setupOutputStream(long startingPosition) throws IOException {
     outputStream = fileOperations.createAppendOutputStream();
-    positionTrackingStream = new PositionTrackingStream(outputStream, startingPosition);
+    positionTrackingStream = new PositionTrackingStream(outputStream, PositionTrackingStream.DEFAULT_BUFFER_SIZE, startingPosition);
     serializationHelper = new DeprecatedSerializationHelper(positionTrackingStream);
   }
 

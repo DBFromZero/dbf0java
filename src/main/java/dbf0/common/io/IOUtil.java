@@ -4,7 +4,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.EndOfStream;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,7 +11,7 @@ import java.io.OutputStream;
 
 public class IOUtil {
 
-  @VisibleForTesting static final int LOWER_7BITS_SET = 0x7F;
+  @VisibleForTesting static final int LOWER_7BITS_SET = 0x80 - 1;
   @VisibleForTesting static final int EIGHTH_BIT_SET = 0x80;
 
   public static void writeVariableLengthUnsignedLong(OutputStream s, long l) throws IOException {
@@ -71,11 +70,7 @@ public class IOUtil {
   }
 
   public static int sizeUnsignedLong(long l) {
-    return sizeUnsignedLong(l, 0);
-  }
-
-  public static int sizeUnsignedLong(long l, int bitAdjust) {
-    return (int) Math.ceil((double) Math.max(Long.SIZE - Long.numberOfLeadingZeros(l) - bitAdjust, 0) / 7.0);
+    return l < EIGHTH_BIT_SET ? 1 : (int) Math.ceil(((double) (Long.SIZE - Long.numberOfLeadingZeros(l))) / 7.0);
   }
 
   public static void skip(InputStream s, long length) throws IOException {

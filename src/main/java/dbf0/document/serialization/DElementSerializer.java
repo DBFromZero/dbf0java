@@ -146,18 +146,18 @@ public class DElementSerializer implements Serializer<DElement> {
   }
 
   private int sizeInt(DInt x) {
-    return sizeUnsignedLong(Math.abs(x.getValue()));
+    return typeAndLengthSize(Math.abs(x.getValue()));
   }
 
   private int sizeString(DString x) {
     var l = x.getValue().length();
-    return sizeUnsignedLong(l) + (int) Math.ceil(estimatedBytesPerChar * l);
+    return typeAndLengthSize(l) + (int) Math.ceil(estimatedBytesPerChar * l);
   }
 
   private int sizeArray(DArray x) {
     var elements = x.getElements();
     var size = elements.size();
-    var total = sizeUnsignedLong(size);
+    var total = typeAndLengthSize(size);
     for (int i = 0; i < size; i++) {
       total += sizeInternal(elements.get(i));
     }
@@ -166,7 +166,7 @@ public class DElementSerializer implements Serializer<DElement> {
 
   private int sizeMap(DMap x) {
     var entries = x.getEntries();
-    var total = sizeUnsignedLong(entries.size());
+    var total = typeAndLengthSize(entries.size());
     for (var entry : entries.entrySet()) {
       total += sizeInternal(entry.getKey());
       total += sizeInternal(entry.getValue());
@@ -174,7 +174,7 @@ public class DElementSerializer implements Serializer<DElement> {
     return total;
   }
 
-  private int sizeUnsignedLong(long l) {
-    return IOUtil.sizeUnsignedLong(l, 4) + 1;
+  private int typeAndLengthSize(long l) {
+    return 1 + IOUtil.sizeUnsignedLong(l);
   }
 }

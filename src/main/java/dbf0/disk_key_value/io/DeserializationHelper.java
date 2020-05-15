@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import static dbf0.disk_key_value.io.DeprecatedSerializationHelper.INT_BYTES;
 import static dbf0.disk_key_value.io.DeprecatedSerializationHelper.LONG_BYTES;
 
+@Deprecated
 public class DeserializationHelper {
 
   protected final InputStream inputStream;

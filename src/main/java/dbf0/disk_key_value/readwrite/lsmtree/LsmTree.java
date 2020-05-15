@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.ReadWriteLockHelper;
+import dbf0.common.io.ByteArraySerializer;
 import dbf0.common.io.SerializationPair;
 import dbf0.disk_key_value.io.FileDirectoryOperations;
 import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
@@ -190,8 +191,8 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
 
   public static <T extends OutputStream> Builder<T, ByteArrayWrapper, ByteArrayWrapper> builderForBytes() {
     return LsmTree.<T, ByteArrayWrapper, ByteArrayWrapper>builder()
-        .withKeySerialization(SerializationPair.forByteArrays())
-        .withValueSerialization(SerializationPair.forByteArrays())
+        .withKeySerialization(ByteArraySerializer.serializationPair())
+        .withValueSerialization(ByteArraySerializer.serializationPair())
         .withKeyComparator(ByteArrayWrapper::compareTo)
         .withDeleteValue(BYTE_ARRAY_DELETE_VALUE);
   }

@@ -4,7 +4,7 @@ import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.IoConsumer;
+import dbf0.common.io.IoConsumer;
 
 import java.io.FileOutputStream;
 import java.io.IOException;

@@ -66,6 +66,10 @@ public class Dbf0Util {
     return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, 0), false);
   }
 
+  /**
+   * Use {@code FileDirectoryOperations} instead
+   */
+  @Deprecated
   public static void requireEmptyDirectory(String directory) {
     var d = new File(directory);
     if (d.isDirectory()) {

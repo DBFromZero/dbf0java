@@ -1,8 +1,6 @@
 package dbf0.common.io;
 
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.EndOfStream;
-import dbf0.common.IoConsumer;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;

@@ -4,7 +4,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import dbf0.common.Dbf0Util;
-import dbf0.common.EndOfStream;
+import dbf0.common.io.EndOfStream;
 import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
 import dbf0.disk_key_value.readwrite.ReadWriteStorage;
 import dbf0.document.serialization.DElementDeserializer;

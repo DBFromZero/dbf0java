@@ -22,17 +22,12 @@ public class PositionTrackingStream extends BufferedOutputStream {
     this.position = startPosition;
   }
 
-  public PositionTrackingStream(OutputStream outputStream, long startPosition) {
-    this(outputStream, DEFAULT_BUFFER_SIZE, startPosition);
-  }
-
-
   public PositionTrackingStream(String path) throws FileNotFoundException {
-    this(new FileOutputStream(path), 0x8000);
+    this(new FileOutputStream(path), DEFAULT_BUFFER_SIZE);
   }
 
   public PositionTrackingStream(File path) throws FileNotFoundException {
-    this(new FileOutputStream(path), 0x8000);
+    this(new FileOutputStream(path), DEFAULT_BUFFER_SIZE);
   }
 
   public long getPosition() {

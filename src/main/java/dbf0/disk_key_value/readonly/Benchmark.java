@@ -5,7 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.IoRunnable;
+import dbf0.common.io.IoRunnable;
 
 import java.time.Duration;
 import java.util.Collections;

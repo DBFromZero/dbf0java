@@ -29,7 +29,7 @@ public interface Serializer<T> {
     return ByteArrayWrapper.of(stream.toByteArray());
   }
 
-  default boolean canBeDeserializedAsByteArrays() {
+  default boolean isByteArrayEquivalent() {
     return false;
   }
 }

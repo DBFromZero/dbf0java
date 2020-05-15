@@ -40,7 +40,7 @@ public class SizePrefixedSerializer<T> implements Serializer<T> {
     return buffer;
   }
 
-  @Override public boolean canBeDeserializedAsByteArrays() {
+  @Override public boolean isByteArrayEquivalent() {
     return true;
   }
 }
