@@ -107,13 +107,15 @@ public class PartitionedLsmTreeTest {
     var executor = Executors.newScheduledThreadPool(4);
     var store = HashPartitionedReadWriteStorage.create(4,
         partition -> {
-          var tree = LsmTree.builderForTesting(directoryOperations.subDirectory(String.valueOf(partition)))
-              .withPendingWritesDeltaThreshold(pendingWritesDeltaThreshold)
+          var tree = LsmTree.builderForTesting(directoryOperations.subDirectory(String.valueOf(partition)),
+              LsmTreeConfiguration.builderForBytes()
+                  .withPendingWritesDeltaThreshold(pendingWritesDeltaThreshold)
+                  .withIndexRate(10)
+                  .withMaxInFlightWriteJobs(10)
+                  .withMaxDeltaReadPercentage(0.5)
+                  .withMergeCronFrequency(Duration.ofMillis(100))
+                  .build())
               .withScheduledExecutorService(executor)
-              .withIndexRate(10)
-              .withMaxInFlightWriteJobs(10)
-              .withMaxDeltaReadPercentage(0.5)
-              .withMergeCronFrequency(Duration.ofMillis(100))
               .build();
           tree.initialize();
           return tree;

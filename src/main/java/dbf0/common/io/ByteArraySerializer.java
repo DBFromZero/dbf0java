@@ -35,4 +35,8 @@ public class ByteArraySerializer implements Serializer<ByteArrayWrapper> {
     var a = x.getArray();
     return IOUtil.sizeUnsignedLong(a.length) + a.length;
   }
+
+  @Override public @NotNull ByteArrayWrapper serializeToBytes(ByteArrayWrapper x) throws IOException {
+    return x;
+  }
 }

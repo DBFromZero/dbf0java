@@ -9,23 +9,23 @@ import java.io.IOException;
 import java.util.Objects;
 import java.util.function.Function;
 
-public class HashPartitionedReadWriteStorage<K, V> implements CloseableReadWriteStorage<K, V> {
+public class HashPartitionedReadWriteStorage<K, V> implements ReadWriteStorage<K, V> {
 
   private final Function<K, Integer> hashFunction;
-  private final ImmutableList<CloseableReadWriteStorage<K, V>> partitions;
+  private final ImmutableList<ReadWriteStorage<K, V>> partitions;
 
   public static <K> Function<K, Integer> defaultHashFunction() {
     return Objects::hashCode;
   }
 
   public interface PartitionFactory<K, V> {
-    CloseableReadWriteStorage<K, V> create(int partition) throws IOException;
+    ReadWriteStorage<K, V> create(int partition) throws IOException;
   }
 
   public static <K, V> HashPartitionedReadWriteStorage<K, V>
   create(Function<K, Integer> hashFunction, int partitions, PartitionFactory<K, V> factory) throws IOException {
     Preconditions.checkArgument(partitions > 0);
-    var builder = ImmutableList.<CloseableReadWriteStorage<K, V>>builder();
+    var builder = ImmutableList.<ReadWriteStorage<K, V>>builder();
     for (int i = 0; i < partitions; i++) {
       builder.add(factory.create(i));
     }
@@ -38,13 +38,13 @@ public class HashPartitionedReadWriteStorage<K, V> implements CloseableReadWrite
   }
 
   public HashPartitionedReadWriteStorage(Function<K, Integer> hashFunction,
-                                         ImmutableList<CloseableReadWriteStorage<K, V>> partitions) {
+                                         ImmutableList<ReadWriteStorage<K, V>> partitions) {
     Preconditions.checkArgument(partitions.size() > 0);
     this.hashFunction = hashFunction;
     this.partitions = partitions;
   }
 
-  public HashPartitionedReadWriteStorage(ImmutableList<CloseableReadWriteStorage<K, V>> partitions) {
+  public HashPartitionedReadWriteStorage(ImmutableList<ReadWriteStorage<K, V>> partitions) {
     this(defaultHashFunction(), partitions);
   }
 

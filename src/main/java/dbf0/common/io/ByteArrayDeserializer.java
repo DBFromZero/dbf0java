@@ -27,4 +27,8 @@ public class ByteArrayDeserializer implements Deserializer<ByteArrayWrapper> {
   @Override public void skipDeserialize(InputStream s) throws IOException {
     IOUtil.skip(s, IOUtil.readVariableLengthUnsignedInt(s));
   }
+
+  @NotNull @Override public ByteArrayWrapper deserialize(ByteArrayWrapper w) throws IOException {
+    return w;
+  }
 }

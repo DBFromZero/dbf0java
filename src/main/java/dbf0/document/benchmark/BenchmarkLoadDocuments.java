@@ -9,6 +9,7 @@ import dbf0.disk_key_value.readwrite.HashPartitionedReadWriteStorage;
 import dbf0.disk_key_value.readwrite.ReadWriteStorage;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageWithBackgroundTasks;
 import dbf0.disk_key_value.readwrite.lsmtree.LsmTree;
+import dbf0.disk_key_value.readwrite.lsmtree.LsmTreeConfiguration;
 import dbf0.document.gson.DElementTypeAdapter;
 import dbf0.document.types.DElement;
 import dbf0.document.types.DMap;
@@ -126,14 +127,16 @@ public class BenchmarkLoadDocuments {
                 ScheduledExecutorService executorService) throws IOException {
     directoryOperations.mkdirs();
 
-    return LsmTree.<FileOutputStream>builderForDocuments()
+    return LsmTree.<FileOutputStream>builderForDocuments(
+        LsmTreeConfiguration.builderForDocuments()
+            .withPendingWritesDeltaThreshold(pendingWritesMergeThreshold)
+            .withIndexRate(indexRate)
+            .withMaxInFlightWriteJobs(3)
+            .withMaxDeltaReadPercentage(0.75)
+            .withMergeCronFrequency(Duration.ofSeconds(1))
+            .build())
         .withBaseDeltaFiles(directoryOperations)
-        .withPendingWritesDeltaThreshold(pendingWritesMergeThreshold)
         .withScheduledExecutorService(executorService)
-        .withIndexRate(indexRate)
-        .withMaxInFlightWriteJobs(3)
-        .withMaxDeltaReadPercentage(0.75)
-        .withMergeCronFrequency(Duration.ofSeconds(1))
         .build();
   }
 

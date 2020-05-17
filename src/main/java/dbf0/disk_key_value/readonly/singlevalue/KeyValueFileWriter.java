@@ -11,8 +11,6 @@ import java.io.OutputStream;
 
 public class KeyValueFileWriter<K, V> extends BaseKeyValueFileWriter<K, V> {
 
-  private transient OutputStream outputStream;
-
   public KeyValueFileWriter(Serializer<K> keySerializer, Serializer<V> valueSerializer, OutputStream outputStream) {
     super(keySerializer, valueSerializer, outputStream);
   }

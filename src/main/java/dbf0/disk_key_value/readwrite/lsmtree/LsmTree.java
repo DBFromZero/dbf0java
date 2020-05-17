@@ -3,18 +3,16 @@ package dbf0.disk_key_value.readwrite.lsmtree;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
+import dbf0.common.InterruptedExceptionWrapper;
 import dbf0.common.ReadWriteLockHelper;
-import dbf0.common.io.ByteArraySerializer;
-import dbf0.common.io.SerializationPair;
 import dbf0.disk_key_value.io.FileDirectoryOperations;
 import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
 import dbf0.disk_key_value.io.MemoryFileOperations;
-import dbf0.disk_key_value.readwrite.CloseableReadWriteStorage;
+import dbf0.disk_key_value.readwrite.ReadWriteStorage;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageWithBackgroundTasks;
 import dbf0.disk_key_value.readwrite.log.LogConsumer;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
 import dbf0.document.types.DElement;
-import dbf0.document.types.DString;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
@@ -22,27 +20,20 @@ import javax.annotation.Nullable;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.time.Duration;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Logger;
 
-public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWriteStorage<K, V> {
+public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K, V> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(LsmTree.class);
-  public static final ByteArrayWrapper BYTE_ARRAY_DELETE_VALUE = ByteArrayWrapper.of(
-      83, 76, 69, 7, 95, 21, 81, 27, 2, 104, 8, 100, 45, 109, 110, 1);
-  public static final DString D_ELEMENT_DELETE_VALUE = new DString("|fxcR/*rwEC\\rMg/^");
 
   public static class Builder<T extends OutputStream, K, V> {
-    private int pendingWritesDeltaThreshold = 10 * 1000;
-    private SerializationPair<K> keySerialization;
-    private SerializationPair<V> valueSerialization;
-    private Comparator<K> keyComparator;
-    private V deleteValue;
+
+    private final LsmTreeConfiguration<K, V> configuration;
+
     private BaseDeltaFiles<T, K, V> baseDeltaFiles;
     private DeltaWriterCoordinator<T, K, V> deltaWriterCoordinator;
     private BaseDeltaMergerCron<T, K, V> mergerCron;
@@ -50,39 +41,10 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
     private WriteAheadLog<?> writeAheadLog;
 
 
-    private int indexRate = 10;
-    private int maxInFlightWriteJobs = 10;
-    double maxDeltaReadPercentage = 0.5;
-    private Duration mergeCronFrequency = Duration.ofSeconds(1);
-
-    public Builder() {
+    public Builder(final LsmTreeConfiguration<K, V> configuration) {
+      this.configuration = Preconditions.checkNotNull(configuration);
     }
 
-    public Builder<T, K, V> withPendingWritesDeltaThreshold(int pendingWritesDeltaThreshold) {
-      Preconditions.checkArgument(pendingWritesDeltaThreshold > 0);
-      this.pendingWritesDeltaThreshold = pendingWritesDeltaThreshold;
-      return this;
-    }
-
-    public Builder<T, K, V> withKeySerialization(SerializationPair<K> keySerialization) {
-      this.keySerialization = Preconditions.checkNotNull(keySerialization);
-      return this;
-    }
-
-    public Builder<T, K, V> withValueSerialization(SerializationPair<V> valueSerialization) {
-      this.valueSerialization = Preconditions.checkNotNull(valueSerialization);
-      return this;
-    }
-
-    public Builder<T, K, V> withKeyComparator(Comparator<K> keyComparator) {
-      this.keyComparator = Preconditions.checkNotNull(keyComparator);
-      return this;
-    }
-
-    public Builder<T, K, V> withDeleteValue(V deleteValue) {
-      this.deleteValue = Preconditions.checkNotNull(deleteValue);
-      return this;
-    }
 
     public Builder<T, K, V> withBaseDeltaFiles(BaseDeltaFiles<T, K, V> baseDeltaFiles) {
       this.baseDeltaFiles = Preconditions.checkNotNull(baseDeltaFiles);
@@ -90,9 +52,11 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
     }
 
     public Builder<T, K, V> withBaseDeltaFiles(FileDirectoryOperations<T> fileDirectoryOperations) {
-      requireKeyValueSerialization();
       return withBaseDeltaFiles(new BaseDeltaFiles<>(
-          keySerialization.getDeserializer(), valueSerialization.getDeserializer(), keyComparator, fileDirectoryOperations));
+          configuration.getKeySerialization().getDeserializer(),
+          configuration.getValueSerialization().getDeserializer(),
+          configuration.getKeyComparator(),
+          fileDirectoryOperations));
     }
 
     public Builder<T, K, V> withDeltaWriteCoordinator(DeltaWriterCoordinator<T, K, V> coordinator) {
@@ -119,32 +83,6 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
       return this;
     }
 
-    public Builder<T, K, V> withIndexRate(int indexRate) {
-      Preconditions.checkArgument(indexRate > 0);
-      this.indexRate = indexRate;
-      return this;
-    }
-
-    public Builder<T, K, V> withMaxInFlightWriteJobs(int maxInFlightWriteJobs) {
-      Preconditions.checkArgument(maxInFlightWriteJobs > 0);
-      this.maxInFlightWriteJobs = maxInFlightWriteJobs;
-      return this;
-    }
-
-    public Builder<T, K, V> withMaxDeltaReadPercentage(double maxDeltaReadPercentage) {
-      Preconditions.checkArgument(maxDeltaReadPercentage > 0);
-      Preconditions.checkArgument(maxDeltaReadPercentage < 1);
-      this.maxDeltaReadPercentage = maxDeltaReadPercentage;
-      return this;
-    }
-
-    public Builder<T, K, V> withMergeCronFrequency(Duration mergeCronFrequency) {
-      Preconditions.checkArgument(!mergeCronFrequency.isZero());
-      Preconditions.checkArgument(!mergeCronFrequency.isNegative());
-      this.mergeCronFrequency = mergeCronFrequency;
-      return this;
-    }
-
     public LsmTree<T, K, V> build() {
       return buildInternal().getLeft();
     }
@@ -156,59 +94,60 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
 
     private Pair<LsmTree<T, K, V>, ExecutorService> buildInternal() {
       Preconditions.checkState(baseDeltaFiles != null, "must specify baseDeltaFiles");
-      Preconditions.checkState(deleteValue != null, "must specify deleteValue");
-      requireKeyValueSerialization();
       ScheduledExecutorService executorService = this.executorService;
       if (executorService == null) {
         executorService = Executors.newScheduledThreadPool(4);
       }
       DeltaWriterCoordinator<T, K, V> coordinator = this.deltaWriterCoordinator;
       if (coordinator == null) {
-        coordinator = new DeltaWriterCoordinator<T, K, V>(baseDeltaFiles, indexRate, maxInFlightWriteJobs,
-            keySerialization.getSerializer(), valueSerialization.getSerializer(), keyComparator,
-            executorService, writeAheadLog);
+        coordinator = new DeltaWriterCoordinator<>(configuration, baseDeltaFiles, executorService, writeAheadLog);
       }
       BaseDeltaMergerCron<T, K, V> mergerCron = this.mergerCron;
       if (mergerCron == null) {
-        mergerCron = new BaseDeltaMergerCron<T, K, V>(baseDeltaFiles, keySerialization, valueSerialization, keyComparator,
-            deleteValue, maxDeltaReadPercentage, mergeCronFrequency,
-            indexRate, executorService);
+        mergerCron = new BaseDeltaMergerCron<>(configuration, baseDeltaFiles, executorService);
       }
-      return Pair.of(new LsmTree<>(pendingWritesDeltaThreshold, keySerialization, valueSerialization, deleteValue,
-          baseDeltaFiles, coordinator, mergerCron, writeAheadLog), executorService);
-    }
-
-    private void requireKeyValueSerialization() {
-      Preconditions.checkState(keySerialization != null, "must specify keySerialization");
-      Preconditions.checkState(valueSerialization != null, "must specify valueSerialization");
-      Preconditions.checkState(keyComparator != null, "must specify keyComparator");
+      return Pair.of(new LsmTree<>(configuration, baseDeltaFiles, coordinator, mergerCron, writeAheadLog),
+          executorService);
     }
   }
 
-  public static <T extends OutputStream, K, V> Builder<T, K, V> builder() {
-    return new Builder<>();
+  public static <T extends OutputStream, K, V> Builder<T, K, V> builder(LsmTreeConfiguration<K, V> config) {
+    return new Builder<>(config);
+  }
+
+  public static <T extends OutputStream> Builder<T, ByteArrayWrapper, ByteArrayWrapper>
+  builderForBytes(LsmTreeConfiguration<ByteArrayWrapper, ByteArrayWrapper> config) {
+    return builder(config);
   }
 
   public static <T extends OutputStream> Builder<T, ByteArrayWrapper, ByteArrayWrapper> builderForBytes() {
-    return LsmTree.<T, ByteArrayWrapper, ByteArrayWrapper>builder()
-        .withKeySerialization(ByteArraySerializer.serializationPair())
-        .withValueSerialization(ByteArraySerializer.serializationPair())
-        .withKeyComparator(ByteArrayWrapper::compareTo)
-        .withDeleteValue(BYTE_ARRAY_DELETE_VALUE);
+    return builderForBytes(LsmTreeConfiguration.builderForBytes().build());
+  }
+
+  public static <K, V> Builder<FileOutputStream, K, V>
+  builderForDirectory(FileDirectoryOperations<FileOutputStream> directoryOperations,
+                      LsmTreeConfiguration<K, V> configuration) {
+    return LsmTree.<FileOutputStream, K, V>builder(configuration).withBaseDeltaFiles(directoryOperations);
   }
 
   public static Builder<FileOutputStream, ByteArrayWrapper, ByteArrayWrapper>
   builderForDirectory(FileDirectoryOperations<FileOutputStream> directoryOperations) {
-    return LsmTree.<FileOutputStream>builderForBytes()
-        .withBaseDeltaFiles(directoryOperations);
+    return LsmTree.<FileOutputStream>builderForBytes().withBaseDeltaFiles(directoryOperations);
+  }
+
+  public static <T extends OutputStream> Builder<T, DElement, DElement>
+  builderForDocuments(LsmTreeConfiguration<DElement, DElement> configuration) {
+    return builder(configuration);
   }
 
   public static <T extends OutputStream> Builder<T, DElement, DElement> builderForDocuments() {
-    return LsmTree.<T, DElement, DElement>builder()
-        .withKeySerialization(DElement.serializationPair())
-        .withValueSerialization(DElement.sizePrefixedSerializationPair())
-        .withKeyComparator(DElement::compareTo)
-        .withDeleteValue(D_ELEMENT_DELETE_VALUE);
+    return builderForDocuments(LsmTreeConfiguration.builderForDocuments().build());
+  }
+
+  public static <K, V> Builder<MemoryFileOperations.MemoryOutputStream, K, V> builderForTesting(
+      MemoryFileDirectoryOperations directoryOperations, LsmTreeConfiguration<K, V> configuration) {
+    return LsmTree.<MemoryFileOperations.MemoryOutputStream, K, V>builder(configuration)
+        .withBaseDeltaFiles(directoryOperations);
   }
 
   public static Builder<MemoryFileOperations.MemoryOutputStream, ByteArrayWrapper, ByteArrayWrapper> builderForTesting(
@@ -217,10 +156,7 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
         .withBaseDeltaFiles(directoryOperations);
   }
 
-  private final int pendingWritesDeltaThreshold;
-  private final SerializationPair<K> keySerialization;
-  private final SerializationPair<V> valueSerialization;
-  private final V deleteValue;
+  private final LsmTreeConfiguration<K, V> configuration;
   private final BaseDeltaFiles<T, K, V> baseDeltaFiles;
   private final DeltaWriterCoordinator<T, K, V> coordinator;
   private final BaseDeltaMergerCron<T, K, V> mergerCron;
@@ -229,18 +165,12 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
   private PendingWritesAndLog<K, V> pendingWrites;
 
-  private LsmTree(int pendingWritesDeltaThreshold,
-                  SerializationPair<K> keySerialization,
-                  SerializationPair<V> valueSerialization,
-                  V deleteValue,
+  private LsmTree(LsmTreeConfiguration<K, V> configuration,
                   BaseDeltaFiles<T, K, V> baseDeltaFiles,
                   DeltaWriterCoordinator<T, K, V> coordinator,
                   BaseDeltaMergerCron<T, K, V> mergerCron,
                   @Nullable WriteAheadLog<?> writeAheadLog) {
-    this.pendingWritesDeltaThreshold = pendingWritesDeltaThreshold;
-    this.keySerialization = keySerialization;
-    this.valueSerialization = valueSerialization;
-    this.deleteValue = deleteValue;
+    this.configuration = configuration;
     this.baseDeltaFiles = baseDeltaFiles;
     this.coordinator = coordinator;
     this.mergerCron = mergerCron;
@@ -253,22 +183,22 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
     if (writeAheadLog != null) {
       writeAheadLog.initialize(() -> {
         // these pending writes don't need a log since they are already persisted in current log that we're reading
-        pendingWrites = new PendingWritesAndLog<>(new HashMap<>(pendingWritesDeltaThreshold), null);
-        var keyDeserializer = keySerialization.getDeserializer();
-        var valueDeserializer = valueSerialization.getDeserializer();
+        pendingWrites = new PendingWritesAndLog<>(new HashMap<>(), null);
+        var keyDeserializer = configuration.getKeySerialization().getDeserializer();
+        var valueDeserializer = configuration.getValueSerialization().getDeserializer();
         return new LogConsumer() {
           @Override public void put(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
             pendingWrites.writes.put(keyDeserializer.deserialize(key), valueDeserializer.deserialize(value));
           }
 
           @Override public void delete(@NotNull ByteArrayWrapper key) throws IOException {
-            pendingWrites.writes.put(keyDeserializer.deserialize(key), deleteValue);
+            pendingWrites.writes.put(keyDeserializer.deserialize(key), configuration.getDeleteValue());
           }
 
           @Override public void persist() throws IOException {
             sendWritesToCoordinator();
             coordinator.addWrites(pendingWrites);
-            pendingWrites = new PendingWritesAndLog<>(new HashMap<>(pendingWritesDeltaThreshold), null);
+            pendingWrites = new PendingWritesAndLog<>(new HashMap<>(configuration.getPendingWritesDeltaThreshold()), null);
           }
         };
       });
@@ -283,25 +213,28 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
     mergerCron.shutdown();
     if (isUsable()) {
       lock.runWithWriteLock(() -> {
+        if (pendingWrites == null) {
+          return;
+        }
         if (!pendingWrites.writes.isEmpty()) {
+          LOGGER.info("writing pending at close");
           if (coordinator.hasMaxInFlightWriters()) {
             LOGGER.warning("Delaying close because DeltaWriteCoordinator is backed up");
             waitForWritesToUnblock();
+          } else {
+            sendWritesToCoordinator();
           }
-          LOGGER.info("writing pending at close");
-          sendWritesToCoordinator();
         }
         pendingWrites = null;
-
         try {
           while (coordinator.hasInFlightWriters() && coordinator.isUsable()) {
             LOGGER.info("Waiting for deltas to finish writing");
-            synchronized (coordinator) {
-              coordinator.wait();
-            }
+            coordinator.awaitNextJobCompletion();
           }
         } catch (InterruptedException e) {
-          LOGGER.warning("Interrupted waiting for deltas to finish writing");
+          var msg = "Interrupted waiting for deltas to finish writing";
+          LOGGER.warning(msg);
+          throw new InterruptedExceptionWrapper(msg, e);
         }
       });
     }
@@ -320,8 +253,9 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
     var writesBlocked = lock.callWithWriteLock(() -> {
       Preconditions.checkState(pendingWrites != null, "is closed");
       if (pendingWrites.logWriter != null) {
-        pendingWrites.logWriter.logPut(keySerialization.getSerializer().serializeToBytes(key),
-            valueSerialization.getSerializer().serializeToBytes(value));
+        pendingWrites.logWriter.logPut(
+            configuration.getKeySerialization().getSerializer().serializeToBytes(key),
+            configuration.getValueSerialization().getSerializer().serializeToBytes(value));
       }
       pendingWrites.writes.put(key, value);
       return checkMergeThreshold();
@@ -353,7 +287,7 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
   }
 
   private @Nullable V checkForDeleteValue(@NotNull V value) {
-    return value.equals(deleteValue) ? null : value;
+    return value.equals(configuration.getDeleteValue()) ? null : value;
   }
 
   @Override public boolean delete(@NotNull K key) throws IOException {
@@ -361,9 +295,9 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
     var writesBlocked = lock.callWithWriteLock(() -> {
       Preconditions.checkState(pendingWrites != null, "is closed");
       if (pendingWrites.logWriter != null) {
-        pendingWrites.logWriter.logDelete(keySerialization.getSerializer().serializeToBytes(key));
+        pendingWrites.logWriter.logDelete(configuration.getKeySerialization().getSerializer().serializeToBytes(key));
       }
-      pendingWrites.writes.put(key, deleteValue);
+      pendingWrites.writes.put(key, configuration.getDeleteValue());
       return checkMergeThreshold();
     });
     if (writesBlocked) {
@@ -379,7 +313,7 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
 
   // only to be called when holding the write lock
   private boolean checkMergeThreshold() throws IOException {
-    if (pendingWrites.writes.size() < pendingWritesDeltaThreshold) {
+    if (pendingWrites.writes.size() < configuration.getPendingWritesDeltaThreshold()) {
       return false;
     }
     if (coordinator.hasMaxInFlightWriters()) {
@@ -391,7 +325,7 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
   }
 
   private void createNewPendingWrites() throws IOException {
-    pendingWrites = new PendingWritesAndLog<>(new HashMap<>(pendingWritesDeltaThreshold),
+    pendingWrites = new PendingWritesAndLog<>(new HashMap<>(configuration.getPendingWritesDeltaThreshold()),
         writeAheadLog == null ? null : writeAheadLog.createWriter());
   }
 
@@ -410,7 +344,7 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
       do {
         while (coordinator.hasMaxInFlightWriters() && coordinator.isUsable()) {
           synchronized (coordinator) {
-            coordinator.wait();
+            coordinator.awaitNextJobCompletion();
           }
         }
         exit = lock.callWithWriteLock(() -> {
@@ -426,8 +360,7 @@ public class LsmTree<T extends OutputStream, K, V> implements CloseableReadWrite
         });
       } while (!exit);
     } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new InterruptedExceptionWrapper("interrupted waiting for write jobs to finish");
+      throw new InterruptedExceptionWrapper("interrupted waiting for write jobs to finish", e);
     }
   }
 }
