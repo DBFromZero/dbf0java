@@ -15,7 +15,7 @@ public interface Serializer<T> {
 
   /**
    * Returns the best estimate serialized size of element {@code x} in bytes
-   * or {@code SIZE_UNKNOWN} if an estimate isn't possible. Errors on the side
+   * or {@code SIZE_UNKNOWN} if an estimation isn't possible. Errors on the side
    * of overestimating when there is uncertainty.
    */
   default int estimateSerializedSize(T x) {

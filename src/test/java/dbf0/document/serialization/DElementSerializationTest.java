@@ -4,11 +4,15 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.gson.GsonBuilder;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
+import dbf0.document.gson.DElementTypeAdapter;
 import dbf0.document.types.*;
 import dbf0.test.RandomSeed;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -16,6 +20,7 @@ import javax.annotation.Nullable;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.function.Function;
 import java.util.logging.Level;
@@ -142,16 +147,31 @@ public class DElementSerializationTest {
   }
 
   @Test public void testComplex() throws IOException {
-    testRoundTrip(randomElement(RandomSeed.CAFE.random(), 3));
+    var gson = new GsonBuilder().setPrettyPrinting().serializeNulls()
+        .registerTypeAdapter(DElement.class, DElementTypeAdapter.getInstance())
+        .create();
+    for (var randomSeed : RandomSeed.values()) {
+      var random = randomSeed.random();
+      var obj = randomElement(random, 5, random.nextFloat() < 0.5F ? DElementType.MAP : DElementType.ARRAY);
+      var json = gson.toJson(obj, DElement.class);
+      LOGGER.info("Complex Object:\n" + Joiner.on("\n").join(
+          Arrays.stream(json.split("\n")).map(s -> "    " + s).iterator()));
+      testRoundTrip(obj);
+    }
   }
 
-
   private DElement randomElement(Random random, int depthRemaining) {
+    return randomElement(random, depthRemaining, null);
+  }
+
+  private DElement randomElement(Random random, int depthRemaining, @Nullable DElementType type) {
     Preconditions.checkArgument(depthRemaining >= 0);
-    var types = DElementType.values();
-    var type = types[random.nextInt(types.length)];
-    if (depthRemaining == 0 && (type == DElementType.ARRAY || type == DElementType.MAP)) {
-      type = DElementType.NULL;
+    if (type == null) {
+      var types = DElementType.values();
+      type = types[random.nextInt(types.length)];
+      if (depthRemaining == 0 && (type == DElementType.ARRAY || type == DElementType.MAP)) {
+        type = DElementType.NULL;
+      }
     }
     switch (type) {
       case NULL:
@@ -163,7 +183,7 @@ public class DElementSerializationTest {
       case DECIMAL:
         return DDecimal.of(BigDecimal.valueOf(random.nextDouble()));
       case STRING:
-        return DString.of(Hex.encodeHexString(ByteArrayWrapper.random(random, random.nextInt(100)).getArray()));
+        return randomString(random);
       case ARRAY:
         return DArray.of(IntStream.range(0, random.nextInt(10))
             .mapToObj(ignored -> randomElement(random, depthRemaining - 1))
@@ -175,10 +195,14 @@ public class DElementSerializationTest {
     }
   }
 
-  private DMap randomMap(Random random, int depthRemaining) {
+  @NotNull private DString randomString(Random random) {
+    return DString.of(Hex.encodeHexString(ByteArrayWrapper.random(random, random.nextInt(16)).getArray()));
+  }
+
+  @NotNull private DMap randomMap(Random random, int depthRemaining) {
     var d = depthRemaining - 1;
     return DMap.of(IntStream.range(0, random.nextInt(10)).boxed().collect(Collectors.toMap(
-        ignored -> randomElement(random, d),
+        ignored -> randomString(random),
         ignored -> randomElement(random, d),
         (a, b) -> DArray.of(a, b)
     )));
@@ -190,17 +214,18 @@ public class DElementSerializationTest {
 
   private void testRoundTrip(DElement original, @Nullable Integer expectedSize) throws IOException {
     var bytes = serializer.serializeToBytes(original);
-    LOGGER.finer(() -> String.format("%s serializes to %s", original, bytes));
+    LOGGER.finer(() -> String.format("%s serializes to %s",
+        StringUtils.abbreviate(original.toString(), 32), bytes));
     if (expectedSize != null) {
       assertThat(bytes.getArray()).hasSize(expectedSize);
     }
     var stream = new ByteArrayInputStream(bytes.getArray());
     var result = deserializer.deserialize(stream);
     assertThat(result).isEqualTo(original);
-    assertThat(stream.available()).isEqualTo(0);
+    assertThat(stream.available()).isZero();
 
     stream.reset();
     deserializer.skipDeserialize(stream);
-    assertThat(stream.available()).isEqualTo(0);
+    assertThat(stream.available()).isZero();
   }
 }

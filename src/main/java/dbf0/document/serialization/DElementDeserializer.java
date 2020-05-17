@@ -20,7 +20,6 @@ import static dbf0.document.serialization.DElementSerializer.LOWER_4BITS_SET;
 public class DElementDeserializer implements Deserializer<DElement> {
 
   private static final DElementDeserializer DEFAULT_CHARSET_INSTANCE = new DElementDeserializer(DEFAULT_CHARSET);
-  private static final int MAX_INTERNED_STRINGS = 5000;
 
   @NotNull public static DElementDeserializer defaultCharsetInstance() {
     return DEFAULT_CHARSET_INSTANCE;

@@ -174,7 +174,8 @@ public class LsmTreeTest {
         .build();
     tree.initialize();
     var random = RandomSeed.CAFE.random();
-    var builder = ReadWriteStorageTester
+    var count = new AtomicInteger(0);
+    var tester = ReadWriteStorageTester
         .builder(tree)
         .knownKeySupplier(() -> randomDString(random, 4))
         .unknownKeySupplier(() -> randomDString(random, 5))
@@ -182,14 +183,11 @@ public class LsmTreeTest {
         .random(random)
         .debug(false)
         .checkDeleteReturnValue(false)
-        .checkSize(false);
-    var count = new AtomicInteger(0);
-    builder.iterationCallback((ignored) -> {
-      if (count.incrementAndGet() % 1000 == 0) {
-        LOGGER.info("iteration " + count.get() + " size " + Dbf0Util.formatBytes(getDirectorySize(operations)));
-      }
-    });
-    var tester = builder.build();
+        .checkSize(false).iterationCallback((ignored) -> {
+          if (count.incrementAndGet() % 1000 == 0) {
+            LOGGER.info("iteration " + count.get() + " size " + Dbf0Util.formatBytes(getDirectorySize(operations)));
+          }
+        }).build();
     tester.testPutDeleteGet(20 * 1000, PutDeleteGet.BALANCED, KnownKeyRate.MID);
   }
 

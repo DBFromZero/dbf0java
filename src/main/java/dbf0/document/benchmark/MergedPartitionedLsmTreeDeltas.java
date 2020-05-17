@@ -11,9 +11,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class MergeLsmTreePartitions {
+public class MergedPartitionedLsmTreeDeltas {
 
-  private static final Logger LOGGER = Dbf0Util.getLogger(MergeLsmTreePartitions.class);
+  private static final Logger LOGGER = Dbf0Util.getLogger(MergedPartitionedLsmTreeDeltas.class);
 
   public static void main(String[] args) throws Exception {
     Dbf0Util.enableConsoleLogging(Level.FINER, true);

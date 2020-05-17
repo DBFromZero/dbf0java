@@ -76,14 +76,18 @@ public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
   @Override
   public String toString() {
     if (length() <= 8) {
-      return Hex.encodeHexString(array);
+      return hexString();
     } else {
       return MoreObjects.toStringHelper(this)
-          .add("prefix", slice(0, 8).toString())
+          .add("prefix", slice(0, 8).hexString())
           .add("length", length())
           .add("hash", hashCode())
           .toString();
     }
+  }
+
+  @NotNull public String hexString() {
+    return new String(Hex.encodeHex(array, false));
   }
 
   public ByteArrayWrapper slice(int start, int end) {

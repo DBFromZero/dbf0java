@@ -52,7 +52,7 @@ public class BenchmarkGetDocuments {
 
     var executor = Executors.newScheduledThreadPool(coreThreads);
     try {
-      ArrayList<DString> keys = loadKeys(keysPath);
+      var keys = loadKeys(keysPath);
       runGets(directory, partitions, indexRate, getThreads, duration, keys, executor);
     } finally {
       executor.shutdown();

@@ -1,5 +1,6 @@
 package dbf0.document.serialization;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import dbf0.common.io.IOUtil;
 import dbf0.common.io.Serializer;
@@ -13,7 +14,6 @@ import java.nio.charset.Charset;
 public class DElementSerializer implements Serializer<DElement> {
 
   static final int LOWER_4BITS_SET = 0xF;
-  static final int FOURTH_BIT = 8;
   static final Charset DEFAULT_CHARSET = Charset.defaultCharset();
 
   private static final DElementSerializer DEFAULT_CHARSET_INSTANCE = new DElementSerializer(DEFAULT_CHARSET);
@@ -36,7 +36,7 @@ public class DElementSerializer implements Serializer<DElement> {
   }
 
   @Override public void serialize(OutputStream s, DElement x) throws IOException {
-    serializeInternal(s, x);
+    serializeInternal(s, Preconditions.checkNotNull(x));
   }
 
 
@@ -133,7 +133,7 @@ public class DElementSerializer implements Serializer<DElement> {
       case INT:
         return sizeInt((DInt) x);
       case DECIMAL:
-        return 10;
+        return 10; // avoid the cost of formatting a decimal and just return this constant
       case STRING:
         return sizeString((DString) x);
       case ARRAY:
@@ -175,6 +175,6 @@ public class DElementSerializer implements Serializer<DElement> {
   }
 
   private int typeAndLengthSize(long l) {
-    return 1 + IOUtil.sizeUnsignedLong(l);
+    return 1 + (l < LOWER_4BITS_SET ? 0 : IOUtil.sizeUnsignedLong(l));
   }
 }

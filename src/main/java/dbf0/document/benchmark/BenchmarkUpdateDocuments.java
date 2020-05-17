@@ -13,7 +13,10 @@ import dbf0.document.types.DString;
 
 import java.io.File;
 import java.time.Duration;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -49,7 +52,7 @@ public class BenchmarkUpdateDocuments {
 
     var executor = Executors.newScheduledThreadPool(coreThreads);
     try {
-      ArrayList<DString> keys = loadKeys(keysPath);
+      var keys = loadKeys(keysPath);
       runUpdates(directory, pendingWritesMergeThreshold, partitions, indexRate, updateThreads, duration, keys, executor);
     } finally {
       executor.shutdown();
