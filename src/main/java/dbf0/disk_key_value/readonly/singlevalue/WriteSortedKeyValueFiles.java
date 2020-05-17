@@ -1,10 +1,10 @@
-package dbf0.disk_key_value.readonly;
+package dbf0.disk_key_value.readonly.singlevalue;
 
 import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.io.IoConsumer;
+import dbf0.common.io.IOConsumer;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -27,7 +27,7 @@ public class WriteSortedKeyValueFiles {
     var entriesCount = Math.round(Float.parseFloat(args[3]));
 
     Dbf0Util.requireEmptyDirectory(directory);
-    IntStream.range(0, fileCount).boxed().parallel().forEach(IoConsumer.wrap(index ->
+    IntStream.range(0, fileCount).boxed().parallel().forEach(IOConsumer.wrap(index ->
         writeFile(directory + "/" + index, valueLength, entriesCount)
     ));
   }
@@ -40,7 +40,7 @@ public class WriteSortedKeyValueFiles {
         .sorted();
 
     try (var storage = KeyValueFileWriter.forByteArrays(new FileOutputStream(path))) {
-      StreamUtils.zipWithIndex(sortedKeys).forEach(IoConsumer.wrap(indexed -> {
+      StreamUtils.zipWithIndex(sortedKeys).forEach(IOConsumer.wrap(indexed -> {
         if (indexed.getIndex() % 10000 == 0) {
           LOGGER.fine(() -> "Writing entry " + indexed.getIndex() + " of " + path);
         }

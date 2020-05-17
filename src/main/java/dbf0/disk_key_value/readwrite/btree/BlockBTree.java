@@ -2,6 +2,7 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import dbf0.common.io.IOExceptionWrapper;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
@@ -37,7 +38,7 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
     storage.startCachingNodes();
     try {
       rootId = getRoot().put(key, value).getId();
-    } catch (BlockBTreeStorage.IOExceptionWrapper e) {
+    } catch (IOExceptionWrapper e) {
       throw new IOException(e);
     } finally {
       storage.stopCachingNodes();
@@ -48,7 +49,7 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
   @Override @Nullable public V get(@NotNull K key) throws IOException {
     try {
       return getRoot().get(key);
-    } catch (BlockBTreeStorage.IOExceptionWrapper e) {
+    } catch (IOExceptionWrapper e) {
       throw new IOException(e);
     }
   }
@@ -60,7 +61,7 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
     try {
       root = getRoot();
       deleted = root.delete(key);
-    } catch (BlockBTreeStorage.IOExceptionWrapper e) {
+    } catch (IOExceptionWrapper e) {
       throw new IOException(e);
     } finally {
       storage.stopCachingNodes();
@@ -83,7 +84,7 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
         var entry = iterator.next();
         rootId = getRoot().put(entry.getKey(), entry.getValue()).getId();
       }
-    } catch (BlockBTreeStorage.IOExceptionWrapper e) {
+    } catch (IOExceptionWrapper e) {
       throw new IOException(e);
     } finally {
       storage.stopCachingNodes();

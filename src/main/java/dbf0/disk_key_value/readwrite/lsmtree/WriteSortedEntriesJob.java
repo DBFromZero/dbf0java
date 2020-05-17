@@ -7,7 +7,7 @@ import dbf0.common.io.Serializer;
 import dbf0.common.io.UnsignedLongSerializer;
 import dbf0.disk_key_value.io.FileOperations;
 import dbf0.disk_key_value.readonly.IndexBuilder;
-import dbf0.disk_key_value.readonly.KeyValueFileWriter;
+import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileWriter;
 
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;

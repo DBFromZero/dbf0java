@@ -1,11 +1,11 @@
-package dbf0.disk_key_value.readonly;
+package dbf0.disk_key_value.readonly.singlevalue;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.io.IoRunnable;
+import dbf0.common.io.IORunnable;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -52,7 +52,7 @@ public class Benchmark {
     var countFound = new AtomicInteger(0);
     var errors = new AtomicInteger(0);
 
-    var threads = IntStream.range(0, readThreads).mapToObj(i -> new Thread(IoRunnable.wrap(() -> {
+    var threads = IntStream.range(0, readThreads).mapToObj(i -> new Thread(IORunnable.wrap(() -> {
       try {
         var threadRandom = new Random();
         while (!Thread.interrupted()) {

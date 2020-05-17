@@ -1,30 +1,27 @@
-package dbf0.disk_key_value.readonly;
+package dbf0.disk_key_value.readonly.singlevalue;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.io.ByteArrayDeserializer;
 import dbf0.common.io.Deserializer;
 import dbf0.common.io.EndOfStream;
-import dbf0.common.io.IOUtil;
+import dbf0.disk_key_value.readonly.base.BaseKeyValueFileReader;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
-public class KeyValueFileReader<K, V> implements Closeable {
+public class KeyValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> {
 
-  private final Deserializer<K> keyDeserializer;
-  private final Deserializer<V> valueDeserializer;
-
-  private transient InputStream inputStream;
   private boolean haveReadKey = false;
 
   public KeyValueFileReader(Deserializer<K> keyDeserializer,
                             Deserializer<V> valueDeserializer,
                             InputStream inputStream) {
-    this.keyDeserializer = Preconditions.checkNotNull(keyDeserializer);
-    this.valueDeserializer = Preconditions.checkNotNull(valueDeserializer);
-    this.inputStream = Preconditions.checkNotNull(inputStream);
+    super(keyDeserializer, valueDeserializer, inputStream);
   }
 
   public static KeyValueFileReader<ByteArrayWrapper, ByteArrayWrapper> forByteArrays(InputStream inputStream) {
@@ -40,7 +37,7 @@ public class KeyValueFileReader<K, V> implements Closeable {
                                                              Deserializer<V> valueDeserializer,
                                                              InputStream stream) {
     return new KeyValueFileReader<>(keyDeserializer, valueDeserializer,
-        new BufferedInputStream(stream, 0x4000));
+        new BufferedInputStream(stream, BaseKeyValueFileReader.DEFAULT_BUFFER_SIZE));
   }
 
   @Nullable public K readKey() throws IOException {
@@ -77,16 +74,5 @@ public class KeyValueFileReader<K, V> implements Closeable {
       return null;
     }
     return Pair.of(key, readValue());
-  }
-
-  void skipBytes(long bytes) throws IOException {
-    IOUtil.skip(inputStream, bytes);
-  }
-
-  @Override public void close() throws IOException {
-    if (inputStream != null) {
-      inputStream.close();
-      inputStream = null;
-    }
   }
 }

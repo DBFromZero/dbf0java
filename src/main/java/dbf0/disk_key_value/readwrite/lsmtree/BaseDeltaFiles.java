@@ -6,7 +6,7 @@ import dbf0.common.ReadWriteLockHelper;
 import dbf0.common.io.Deserializer;
 import dbf0.disk_key_value.io.FileDirectoryOperations;
 import dbf0.disk_key_value.io.FileOperations;
-import dbf0.disk_key_value.readonly.RandomAccessKeyValueFileReader;
+import dbf0.disk_key_value.readonly.singlevalue.RandomAccessKeyValueFileReader;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

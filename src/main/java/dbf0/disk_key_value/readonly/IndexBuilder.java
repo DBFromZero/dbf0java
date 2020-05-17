@@ -3,6 +3,7 @@ package dbf0.disk_key_value.readonly;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import dbf0.common.Dbf0Util;
+import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileWriter;
 
 import java.io.IOException;
 import java.util.logging.Logger;

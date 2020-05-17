@@ -6,8 +6,8 @@ import dbf0.common.Dbf0Util;
 import dbf0.common.io.*;
 import dbf0.disk_key_value.io.FileOperations;
 import dbf0.disk_key_value.readonly.IndexBuilder;
-import dbf0.disk_key_value.readonly.KeyValueFileReader;
-import dbf0.disk_key_value.readonly.KeyValueFileWriter;
+import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileReader;
+import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileWriter;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 

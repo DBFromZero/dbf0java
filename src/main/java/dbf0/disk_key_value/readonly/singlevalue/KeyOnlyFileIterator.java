@@ -1,18 +1,17 @@
-package dbf0.disk_key_value.readonly;
+package dbf0.disk_key_value.readonly.singlevalue;
 
 import com.google.common.base.Preconditions;
-import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.Iterator;
 
-public class KeyValueFileIterator<K, V> implements Iterator<Pair<K, V>> {
-  private final KeyValueFileReader<K, V> reader;
+class KeyOnlyFileIterator<K> implements Iterator<K> {
+  private final KeyValueFileReader<K, ?> reader;
   private boolean hasReadNext = false;
-  private Pair<K, V> next = null;
+  private K next = null;
 
-  public KeyValueFileIterator(KeyValueFileReader<K, V> reader) {
+  public KeyOnlyFileIterator(KeyValueFileReader<K, ?> reader) {
     this.reader = Preconditions.checkNotNull(reader);
   }
 
@@ -26,7 +25,7 @@ public class KeyValueFileIterator<K, V> implements Iterator<Pair<K, V>> {
   }
 
   @Override
-  public Pair<K, V> next() {
+  public K next() {
     if (!hasNext()) {
       throw new RuntimeException("no next");
     }
@@ -37,9 +36,13 @@ public class KeyValueFileIterator<K, V> implements Iterator<Pair<K, V>> {
   }
 
   @Nullable
-  private Pair<K, V> readNext() {
+  private K readNext() {
     try {
-      return reader.readKeyValue();
+      var key = reader.readKey();
+      if (key != null) {
+        reader.skipValue();
+      }
+      return key;
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

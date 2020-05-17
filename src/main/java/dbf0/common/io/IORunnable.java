@@ -3,7 +3,7 @@ package dbf0.common.io;
 
 import java.io.IOException;
 
-public interface IoRunnable {
+public interface IORunnable {
 
   void run() throws IOException;
 
@@ -11,15 +11,15 @@ public interface IoRunnable {
     return wrap(this);
   }
 
-  static Wrapper wrap(IoRunnable x) {
+  static Wrapper wrap(IORunnable x) {
     return new Wrapper(x);
   }
 
   class Wrapper implements Runnable {
 
-    private final IoRunnable delegate;
+    private final IORunnable delegate;
 
-    private Wrapper(IoRunnable delegate) {
+    private Wrapper(IORunnable delegate) {
       this.delegate = delegate;
     }
 
@@ -27,7 +27,7 @@ public interface IoRunnable {
       try {
         delegate.run();
       } catch (IOException e) {
-        throw new RuntimeException(e);
+        throw new IOExceptionWrapper(e);
       }
     }
   }

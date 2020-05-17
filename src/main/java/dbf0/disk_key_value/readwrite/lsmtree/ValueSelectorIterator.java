@@ -4,8 +4,8 @@ import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.PeekingIterator;
-import dbf0.disk_key_value.readonly.KeyValueFileIterator;
-import dbf0.disk_key_value.readonly.KeyValueFileReader;
+import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileIterator;
+import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileReader;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.Comparator;

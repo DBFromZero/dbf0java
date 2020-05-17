@@ -3,7 +3,7 @@ package dbf0.common.io;
 import java.io.IOException;
 import java.util.function.Consumer;
 
-public interface IoConsumer<T> {
+public interface IOConsumer<T> {
 
   void accept(T t) throws IOException;
 
@@ -11,15 +11,15 @@ public interface IoConsumer<T> {
     return wrap(this);
   }
 
-  static <T> Wrapper<T> wrap(IoConsumer<T> x) {
+  static <T> Wrapper<T> wrap(IOConsumer<T> x) {
     return new Wrapper<>(x);
   }
 
   class Wrapper<T> implements Consumer<T> {
 
-    private final IoConsumer<T> delegate;
+    private final IOConsumer<T> delegate;
 
-    private Wrapper(IoConsumer<T> delegate) {
+    private Wrapper(IOConsumer<T> delegate) {
       this.delegate = delegate;
     }
 
@@ -27,7 +27,7 @@ public interface IoConsumer<T> {
       try {
         delegate.accept(t);
       } catch (IOException e) {
-        throw new RuntimeException(e);
+        throw new IOExceptionWrapper(e);
       }
     }
   }

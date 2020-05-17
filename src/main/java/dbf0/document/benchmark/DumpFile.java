@@ -2,7 +2,7 @@ package dbf0.document.benchmark;
 
 import com.google.common.base.Joiner;
 import dbf0.common.io.SizePrefixedDeserializer;
-import dbf0.disk_key_value.readonly.KeyValueFileReader;
+import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileReader;
 import dbf0.document.serialization.DElementDeserializer;
 import dbf0.document.types.DNull;
 

@@ -1,13 +1,14 @@
-package dbf0.disk_key_value.readonly;
+package dbf0.disk_key_value.readonly.singlevalue;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.io.ByteArraySerializer;
-import dbf0.common.io.IoFunction;
+import dbf0.common.io.IOFunction;
 import dbf0.common.io.PositionTrackingStream;
 import dbf0.common.io.UnsignedLongSerializer;
+import dbf0.disk_key_value.readonly.IndexBuilder;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.FileOutputStream;
@@ -38,7 +39,7 @@ public class MergeSortFiles {
     LOGGER.info("Writing " + indexSpecs.size() + " indices");
     indexSpecs.forEach(spec -> LOGGER.info("  Index rate " + spec.getRight() + " in " + spec.getLeft()));
 
-    var iterators = IntStream.range(0, sortedFilesCount).boxed().map(IoFunction.wrap(index ->
+    var iterators = IntStream.range(0, sortedFilesCount).boxed().map(IOFunction.wrap(index ->
         new KeyValueFileIterator<>(KeyValueFileReader.forByteArrays(sortedFilesDirectory + "/" + index))))
         .collect(Collectors.toList());
     @SuppressWarnings("UnstableApiUsage") var sortedIterator = Iterators.mergeSorted(iterators, Map.Entry.comparingByKey());

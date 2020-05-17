@@ -3,22 +3,22 @@ package dbf0.common.io;
 import java.io.IOException;
 import java.util.function.Supplier;
 
-public interface IoSupplier<T> {
+public interface IOSupplier<T> {
   T get() throws IOException;
 
   default Wrapper<T> unchcecked() {
     return wrap(this);
   }
 
-  static <T> Wrapper<T> wrap(IoSupplier<T> x) {
+  static <T> Wrapper<T> wrap(IOSupplier<T> x) {
     return new Wrapper<>(x);
   }
 
   class Wrapper<T> implements Supplier<T> {
 
-    private final IoSupplier<T> delegate;
+    private final IOSupplier<T> delegate;
 
-    private Wrapper(IoSupplier<T> delegate) {
+    private Wrapper(IOSupplier<T> delegate) {
       this.delegate = delegate;
     }
 
@@ -26,7 +26,7 @@ public interface IoSupplier<T> {
       try {
         return delegate.get();
       } catch (IOException e) {
-        throw new RuntimeException(e);
+        throw new IOExceptionWrapper(e);
       }
     }
   }
