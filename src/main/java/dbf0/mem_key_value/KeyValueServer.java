@@ -4,7 +4,7 @@ import com.google.common.base.Preconditions;
 import dbf0.base.BaseServer;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.PrefixIo;
+import dbf0.common.io.IOUtil;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -49,10 +49,10 @@ class KeyValueServer extends BaseServer {
       case -1:
         LOGGER.warning("unexpected end of stream");
         return;
-      case PrefixIo.SET:
+      case KeyValueConnector.SET:
         processSet(socket);
         break;
-      case PrefixIo.GET:
+      case KeyValueConnector.GET:
         processGet(socket);
         break;
       default:
@@ -61,22 +61,22 @@ class KeyValueServer extends BaseServer {
   }
 
   private void processSet(Socket socket) throws IOException {
-    var key = PrefixIo.readBytes(socket.getInputStream());
-    var value = PrefixIo.readBytes(socket.getInputStream());
+    var key = IOUtil.readBytes(socket.getInputStream());
+    var value = IOUtil.readBytes(socket.getInputStream());
     LOGGER.finest(() -> "Set " + key + " to " + value);
     map.put(key, value);
   }
 
   private void processGet(Socket socket) throws IOException {
-    var key = PrefixIo.readBytes(socket.getInputStream());
+    var key = IOUtil.readBytes(socket.getInputStream());
     var value = map.get(key);
     if (value == null) {
       LOGGER.finest(() -> "No value for " + key);
-      socket.getOutputStream().write(PrefixIo.NOT_FOUND);
+      socket.getOutputStream().write(KeyValueConnector.NOT_FOUND);
     } else {
       LOGGER.finest(() -> "Found value for " + key + " of " + value);
-      socket.getOutputStream().write(PrefixIo.FOUND);
-      PrefixIo.writeBytes(socket.getOutputStream(), value);
+      socket.getOutputStream().write(KeyValueConnector.FOUND);
+      IOUtil.writeBytes(socket.getOutputStream(), value);
     }
   }
 }

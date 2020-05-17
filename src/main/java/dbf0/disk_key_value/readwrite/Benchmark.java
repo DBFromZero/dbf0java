@@ -6,9 +6,9 @@ import com.google.gson.Gson;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.ReservoirSampler;
+import dbf0.disk_key_value.io.DeprecatedSerializationHelper;
 import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
 import dbf0.disk_key_value.io.FileOperationsImpl;
-import dbf0.disk_key_value.io.SerializationHelper;
 import dbf0.disk_key_value.io.SerializationPair;
 import dbf0.disk_key_value.readwrite.blocks.FileBlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.FileMetadataStorage;
@@ -42,7 +42,7 @@ import java.util.stream.IntStream;
 
 public class Benchmark {
 
-  private static final Logger LOGGER = Dbf0Util.getLogger(dbf0.disk_key_value.readonly.Benchmark.class);
+  private static final Logger LOGGER = Dbf0Util.getLogger(Benchmark.class);
 
   public static void main(String[] args) throws Exception {
     Preconditions.checkArgument(args.length >= 9);
@@ -157,7 +157,7 @@ public class Benchmark {
     var blockStorage = FileBlockStorage.forFile(file, metadataStore);
     var bTreeStorage = new BlockBTreeStorage<>(
         config,
-        metadataStore.newMap("btree", SerializationHelper::writeLong, SerializationHelper::writeLong),
+        metadataStore.newMap("btree", DeprecatedSerializationHelper::writeLong, DeprecatedSerializationHelper::writeLong),
         blockStorage,
         new NodeSerialization<>(
             config,
@@ -228,10 +228,11 @@ public class Benchmark {
         executor);
   }
 
-  private static LsmTree<FileOutputStream> createLsmTree(FileDirectoryOperationsImpl directoryOps,
-                                                         int pendingWritesMergeThreshold, int indexRate,
-                                                         ScheduledExecutorService executorService,
-                                                         @Nullable WriteAheadLog<?> writeAheadLog) throws IOException {
+  private static LsmTree<FileOutputStream, ByteArrayWrapper, ByteArrayWrapper>
+  createLsmTree(FileDirectoryOperationsImpl directoryOps,
+                int pendingWritesMergeThreshold, int indexRate,
+                ScheduledExecutorService executorService,
+                @Nullable WriteAheadLog<?> writeAheadLog) throws IOException {
     directoryOps.mkdirs();
     directoryOps.clear();
 
@@ -254,7 +255,7 @@ public class Benchmark {
                                     AtomicReference<Stats> stats, AtomicInteger errors) {
     try {
       var random = new Random();
-      var keyTracker = new ReservoirSampler<ByteArrayWrapper>(random);
+      var keyTracker = new ReservoirSampler<ByteArrayWrapper>(random, 10 * 1000);
       Supplier<ByteArrayWrapper> getDelKeyGenerate = () -> {
         var known = (!keyTracker.isEmpty()) && random.nextDouble() < knownKeyRate;
         return known ? keyTracker.sample() : randomKey(random, keySpaceSize);

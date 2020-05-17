@@ -2,33 +2,53 @@ package dbf0.disk_key_value.readonly;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.EndOfStream;
-import dbf0.common.PrefixIo;
+import dbf0.common.io.ByteArrayDeserializer;
+import dbf0.common.io.Deserializer;
+import dbf0.common.io.EndOfStream;
+import dbf0.common.io.IOUtil;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
 import java.io.*;
 
-public class KeyValueFileReader implements Closeable {
+public class KeyValueFileReader<K, V> implements Closeable {
+
+  private final Deserializer<K> keyDeserializer;
+  private final Deserializer<V> valueDeserializer;
 
   private transient InputStream inputStream;
   private boolean haveReadKey = false;
 
-  public KeyValueFileReader(InputStream inputStream) {
-    this.inputStream = inputStream;
+  public KeyValueFileReader(Deserializer<K> keyDeserializer,
+                            Deserializer<V> valueDeserializer,
+                            InputStream inputStream) {
+    this.keyDeserializer = Preconditions.checkNotNull(keyDeserializer);
+    this.valueDeserializer = Preconditions.checkNotNull(valueDeserializer);
+    this.inputStream = Preconditions.checkNotNull(inputStream);
   }
 
-  KeyValueFileReader(String path) throws IOException {
-    // by default use a large buffer as it is assumed we'll be reading many entries
-    this(new BufferedInputStream(new FileInputStream(path), 0x8000));
+  public static KeyValueFileReader<ByteArrayWrapper, ByteArrayWrapper> forByteArrays(InputStream inputStream) {
+    return bufferStream(ByteArrayDeserializer.getInstance(), ByteArrayDeserializer.getInstance(),
+        inputStream);
   }
 
-  @Nullable ByteArrayWrapper readKey() throws IOException {
+  public static KeyValueFileReader<ByteArrayWrapper, ByteArrayWrapper> forByteArrays(String path) throws IOException {
+    return forByteArrays(new FileInputStream(path));
+  }
+
+  public static <K, V> KeyValueFileReader<K, V> bufferStream(Deserializer<K> keyDeserializer,
+                                                             Deserializer<V> valueDeserializer,
+                                                             InputStream stream) {
+    return new KeyValueFileReader<>(keyDeserializer, valueDeserializer,
+        new BufferedInputStream(stream, 0x4000));
+  }
+
+  @Nullable public K readKey() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(!haveReadKey);
-    ByteArrayWrapper key;
+    K key;
     try {
-      key = PrefixIo.readBytes(inputStream);
+      key = keyDeserializer.deserialize(inputStream);
     } catch (EndOfStream ignored) {
       return null;
     }
@@ -36,23 +56,22 @@ public class KeyValueFileReader implements Closeable {
     return key;
   }
 
-  ByteArrayWrapper readValue() throws IOException {
+  public V readValue() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(haveReadKey);
-    var value = PrefixIo.readBytes(inputStream);
+    V value = valueDeserializer.deserialize(inputStream);
     haveReadKey = false;
     return value;
   }
 
-  void skipValue() throws IOException {
+  public void skipValue() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
     Preconditions.checkState(haveReadKey);
-    int length = PrefixIo.readLength(inputStream);
-    skipBytes(length);
+    valueDeserializer.skipDeserialize(inputStream);
     haveReadKey = false;
   }
 
-  @Nullable Pair<ByteArrayWrapper, ByteArrayWrapper> readKeyValue() throws IOException {
+  @Nullable Pair<K, V> readKeyValue() throws IOException {
     var key = readKey();
     if (key == null) {
       return null;
@@ -61,14 +80,7 @@ public class KeyValueFileReader implements Closeable {
   }
 
   void skipBytes(long bytes) throws IOException {
-    long remainingToSkip = bytes;
-    while (remainingToSkip > 0) {
-      long skipped = inputStream.skip(remainingToSkip);
-      if (skipped == 0) {
-        throw new RuntimeException("Failed to skip " + bytes + " only skipped " + (bytes - remainingToSkip));
-      }
-      remainingToSkip -= skipped;
-    }
+    IOUtil.skip(inputStream, bytes);
   }
 
   @Override public void close() throws IOException {

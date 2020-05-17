@@ -4,14 +4,15 @@ import dbf0.common.ByteArrayWrapper;
 
 import java.io.IOException;
 
-public interface Deserializer<T> {
+@Deprecated
+public interface DeprecatedDeserializer<T> {
   T deserialize(DeserializationHelper helper) throws IOException;
 
-  static Deserializer<Integer> intDeserializer() {
+  static DeprecatedDeserializer<Integer> intDeserializer() {
     return DeserializationHelper::readInt;
   }
 
-  static Deserializer<ByteArrayWrapper> bytesDeserializer() {
+  static DeprecatedDeserializer<ByteArrayWrapper> bytesDeserializer() {
     return DeserializationHelper::readBytes;
   }
 }

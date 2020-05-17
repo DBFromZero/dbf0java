@@ -1,8 +1,8 @@
 package dbf0.disk_key_value.readwrite.blocks;
 
 import com.google.common.base.Preconditions;
+import dbf0.disk_key_value.io.DeprecatedSerializationHelper;
 import dbf0.disk_key_value.io.DeserializationHelper;
-import dbf0.disk_key_value.io.SerializationHelper;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -15,7 +15,7 @@ public interface BlockStorage extends Closeable {
   interface BlockWriter {
     long getBlockId();
 
-    SerializationHelper serializer();
+    DeprecatedSerializationHelper serializer();
 
     boolean isCommitted();
 
@@ -36,7 +36,7 @@ public interface BlockStorage extends Closeable {
 
   BlockStats getStats();
 
-  abstract class BaseBlockWriter<T extends SerializationHelper> implements BlockWriter {
+  abstract class BaseBlockWriter<T extends DeprecatedSerializationHelper> implements BlockWriter {
 
     protected final long blockId;
     protected final T serializer;
@@ -51,7 +51,7 @@ public interface BlockStorage extends Closeable {
       return blockId;
     }
 
-    @Override public SerializationHelper serializer() {
+    @Override public DeprecatedSerializationHelper serializer() {
       Preconditions.checkState(!isCommitted);
       return serializer;
     }

@@ -1,19 +1,19 @@
 package dbf0.disk_key_value.readonly;
 
-import dbf0.common.ByteArrayWrapper;
+import com.google.common.base.Preconditions;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.Iterator;
 
-public class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
-  private final KeyValueFileReader reader;
+public class KeyValueFileIterator<K, V> implements Iterator<Pair<K, V>> {
+  private final KeyValueFileReader<K, V> reader;
   private boolean hasReadNext = false;
-  private Pair<ByteArrayWrapper, ByteArrayWrapper> next = null;
+  private Pair<K, V> next = null;
 
-  public KeyValueFileIterator(KeyValueFileReader reader) {
-    this.reader = reader;
+  public KeyValueFileIterator(KeyValueFileReader<K, V> reader) {
+    this.reader = Preconditions.checkNotNull(reader);
   }
 
   @Override
@@ -26,7 +26,7 @@ public class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, Byt
   }
 
   @Override
-  public Pair<ByteArrayWrapper, ByteArrayWrapper> next() {
+  public Pair<K, V> next() {
     if (!hasNext()) {
       throw new RuntimeException("no next");
     }
@@ -37,7 +37,7 @@ public class KeyValueFileIterator implements Iterator<Pair<ByteArrayWrapper, Byt
   }
 
   @Nullable
-  private Pair<ByteArrayWrapper, ByteArrayWrapper> readNext() {
+  private Pair<K, V> readNext() {
     try {
       return reader.readKeyValue();
     } catch (IOException e) {

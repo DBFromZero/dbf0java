@@ -1,42 +1,45 @@
 package dbf0.disk_key_value.readwrite.lsmtree;
 
 import com.google.common.base.Preconditions;
-import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.ReadWriteLockHelper;
+import dbf0.common.io.Deserializer;
 import dbf0.disk_key_value.io.FileDirectoryOperations;
 import dbf0.disk_key_value.io.FileOperations;
-import dbf0.disk_key_value.readonly.KeyValueFileIterator;
-import dbf0.disk_key_value.readonly.KeyValueFileReader;
 import dbf0.disk_key_value.readonly.RandomAccessKeyValueFileReader;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
-public class BaseDeltaFiles<T extends OutputStream> {
+public class BaseDeltaFiles<T extends OutputStream, K, V> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(BaseDeltaFiles.class);
-  private static final int BUFFER_SIZE = 0x4000;
   public static final String DELTA_PREFIX = "delta-";
 
+  private final Deserializer<K> keyDeserializer;
+  private final Deserializer<V> valueDeserializer;
+  private final Comparator<K> keyComparator;
   private final FileDirectoryOperations<T> directoryOperations;
+
   private final FileOperations<T> baseOperations;
   private final FileOperations<T> baseIndexOperations;
-  private final TreeMap<Integer, ReaderWrapper> orderedInUseDeltas = new TreeMap<>();
-  private ReaderWrapper baseWrapper;
+  private final TreeMap<Integer, ReaderWrapper<K, V>> orderedInUseDeltas = new TreeMap<>();
+  private ReaderWrapper<K, V> baseWrapper;
   private int nextDelta = 0;
 
-  public BaseDeltaFiles(FileDirectoryOperations<T> directoryOperations) {
-    this.directoryOperations = directoryOperations;
+  public BaseDeltaFiles(Deserializer<K> keyDeserializer,
+                        Deserializer<V> valueDeserializer,
+                        Comparator<K> keyComparator,
+                        FileDirectoryOperations<T> directoryOperations) {
+    this.keyDeserializer = Preconditions.checkNotNull(keyDeserializer);
+    this.valueDeserializer = Preconditions.checkNotNull(valueDeserializer);
+    this.keyComparator = Preconditions.checkNotNull(keyComparator);
+    this.directoryOperations = Preconditions.checkNotNull(directoryOperations);
     this.baseOperations = directoryOperations.file("base");
     this.baseIndexOperations = directoryOperations.file("base-index");
   }
@@ -76,9 +79,9 @@ public class BaseDeltaFiles<T extends OutputStream> {
     return new ArrayList<>(orderedInUseDeltas.keySet());
   }
 
-  @Nullable public ByteArrayWrapper searchForKey(ByteArrayWrapper key) throws IOException {
+  @Nullable public V searchForKey(K key) throws IOException {
     Preconditions.checkState(hasInUseBase());
-    List<ReaderWrapper> orderedDeltas;
+    List<ReaderWrapper<K, V>> orderedDeltas;
     synchronized (this) {
       orderedDeltas = new ArrayList<>(orderedInUseDeltas.values());
     }
@@ -90,9 +93,9 @@ public class BaseDeltaFiles<T extends OutputStream> {
     return baseWrapper.lock.callWithReadLock(() -> Preconditions.checkNotNull(baseWrapper.reader).get(key));
   }
 
-  @Nullable private ByteArrayWrapper recursivelySearchDeltasInReverse(
-      Iterator<ReaderWrapper> iterator,
-      ByteArrayWrapper key) throws IOException {
+  @Nullable private V recursivelySearchDeltasInReverse(
+      Iterator<ReaderWrapper<K, V>> iterator,
+      K key) throws IOException {
     if (!iterator.hasNext()) {
       return null;
     }
@@ -115,7 +118,7 @@ public class BaseDeltaFiles<T extends OutputStream> {
     Preconditions.checkState(!hasInUseBase());
     var reader = createRandomAccessReader(baseOperations, baseIndexOperations);
     synchronized (this) {
-      baseWrapper = new ReaderWrapper(reader);
+      baseWrapper = new ReaderWrapper<>(reader);
     }
   }
 
@@ -126,13 +129,7 @@ public class BaseDeltaFiles<T extends OutputStream> {
   synchronized void addDelta(Integer delta) throws IOException {
     LOGGER.info("Adding delta " + delta);
     Preconditions.checkState(hasInUseBase());
-    orderedInUseDeltas.put(delta, new ReaderWrapper(createRandomAccessReader(getDeltaOperations(delta), getDeltaIndexOperations(delta))));
-  }
-
-  // these three methods should only be called by the merger cron
-  RandomAccessKeyValueFileReader getBaseReaderForMerge() {
-    Preconditions.checkState(hasInUseBase());
-    return baseWrapper.reader;
+    orderedInUseDeltas.put(delta, new ReaderWrapper<>(createRandomAccessReader(getDeltaOperations(delta), getDeltaIndexOperations(delta))));
   }
 
   void commitNewBase(FileOperations.OverWriter<T> baseOverWriter,
@@ -152,7 +149,7 @@ public class BaseDeltaFiles<T extends OutputStream> {
 
   public void deleteDelta(Integer delta) throws IOException {
     LOGGER.info("Deleting delta " + delta);
-    ReaderWrapper wrapper;
+    ReaderWrapper<K, V> wrapper;
     synchronized (this) {
       wrapper = orderedInUseDeltas.remove(delta);
     }
@@ -181,21 +178,17 @@ public class BaseDeltaFiles<T extends OutputStream> {
     return directoryOperations.file(DELTA_PREFIX + delta + "-index");
   }
 
-  @NotNull private KeyValueFileReader createReader(FileOperations<T> operations) throws IOException {
-    return new KeyValueFileReader(new BufferedInputStream(operations.createInputStream(), BUFFER_SIZE));
+  @NotNull private RandomAccessKeyValueFileReader<K, V> createRandomAccessReader(FileOperations<T> baseOperations,
+                                                                                 FileOperations<T> indexOperations) throws IOException {
+    return RandomAccessKeyValueFileReader.open(keyDeserializer, valueDeserializer, keyComparator,
+        baseOperations, indexOperations);
   }
 
-  @NotNull private RandomAccessKeyValueFileReader createRandomAccessReader(FileOperations<T> baseOperations,
-                                                                           FileOperations<T> indexOperations) throws IOException {
-    return new RandomAccessKeyValueFileReader(baseOperations, RandomAccessKeyValueFileReader.readIndex(
-        new KeyValueFileIterator(createReader(indexOperations))));
-  }
-
-  private static class ReaderWrapper {
-    @Nullable private RandomAccessKeyValueFileReader reader;
+  private static class ReaderWrapper<K, V> {
+    @Nullable private RandomAccessKeyValueFileReader<K, V> reader;
     private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
 
-    private ReaderWrapper(@NotNull RandomAccessKeyValueFileReader reader) {
+    private ReaderWrapper(@NotNull RandomAccessKeyValueFileReader<K, V> reader) {
       this.reader = Preconditions.checkNotNull(reader);
     }
   }

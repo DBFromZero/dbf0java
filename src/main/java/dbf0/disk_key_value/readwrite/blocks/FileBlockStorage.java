@@ -4,7 +4,8 @@ import com.google.common.base.Functions;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import dbf0.common.Dbf0Util;
-import dbf0.common.PositionTrackingStream;
+import dbf0.common.io.IOUtil;
+import dbf0.common.io.PositionTrackingStream;
 import dbf0.disk_key_value.io.*;
 
 import java.io.*;
@@ -23,7 +24,7 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
 
   private T outputStream;
   private PositionTrackingStream positionTrackingStream;
-  private SerializationHelper serializationHelper;
+  private DeprecatedSerializationHelper serializationHelper;
   private FileBlockWriter blockWriter;
   private boolean inBatch = false;
 
@@ -38,8 +39,8 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
 
   public static FileBlockStorage<FileOutputStream> forFile(File file, FileMetadataStorage<?> metadataStorage) {
     return new FileBlockStorage<>(new FileOperationsImpl(file, "-vacuum"),
-        metadataStorage.newMap("used-blocks", SerializationHelper::writeLong, SerializationHelper::writeInt),
-        metadataStorage.newMap("unused-blocks", SerializationHelper::writeLong, SerializationHelper::writeInt));
+        metadataStorage.newMap("used-blocks", DeprecatedSerializationHelper::writeLong, DeprecatedSerializationHelper::writeInt),
+        metadataStorage.newMap("unused-blocks", DeprecatedSerializationHelper::writeLong, DeprecatedSerializationHelper::writeInt));
   }
 
   public static FileBlockStorage<MemoryFileOperations.MemoryOutputStream> inMemory() {
@@ -70,9 +71,9 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
     postWrite();
   }
 
-  private class FileBlockWriter extends BaseBlockWriter<SerializationHelper> {
+  private class FileBlockWriter extends BaseBlockWriter<DeprecatedSerializationHelper> {
 
-    public FileBlockWriter(long blockId, SerializationHelper serializer) {
+    public FileBlockWriter(long blockId, DeprecatedSerializationHelper serializer) {
       super(blockId, serializer);
     }
 
@@ -110,7 +111,7 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
 
       // TODO, if block is large enough, return a DeserializationHelper backed by a stream
       var bytes = new byte[length];
-      Dbf0Util.readArrayFully(inputStream, bytes);
+      IOUtil.readArrayFully(inputStream, bytes);
       return new DeserializationHelper(bytes);
     }
   }
@@ -138,8 +139,8 @@ public class FileBlockStorage<T extends OutputStream> implements BlockStorage {
 
   private void setupOutputStream(long startingPosition) throws IOException {
     outputStream = fileOperations.createAppendOutputStream();
-    positionTrackingStream = new PositionTrackingStream(outputStream, startingPosition);
-    serializationHelper = new SerializationHelper(positionTrackingStream);
+    positionTrackingStream = new PositionTrackingStream(outputStream, PositionTrackingStream.DEFAULT_BUFFER_SIZE, startingPosition);
+    serializationHelper = new DeprecatedSerializationHelper(positionTrackingStream);
   }
 
   private void load() throws IOException {

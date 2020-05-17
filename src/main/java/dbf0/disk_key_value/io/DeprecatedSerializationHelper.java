@@ -1,21 +1,21 @@
 package dbf0.disk_key_value.io;
 
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.PrefixIo;
+import dbf0.common.io.IOUtil;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.Map;
 
-public class SerializationHelper {
+@Deprecated
+public class DeprecatedSerializationHelper {
 
   public static final int LONG_BYTES = Long.SIZE / Byte.SIZE;
   public static final int INT_BYTES = Integer.SIZE / Byte.SIZE;
   protected final OutputStream outputStream;
 
-  public SerializationHelper(OutputStream outputStream) {
+  public DeprecatedSerializationHelper(OutputStream outputStream) {
     this.outputStream = outputStream;
   }
 
@@ -34,18 +34,10 @@ public class SerializationHelper {
   }
 
   public void writeBytes(ByteArrayWrapper w) throws IOException {
-    PrefixIo.writeBytes(outputStream, w);
+    IOUtil.writeBytes(outputStream, w);
   }
 
   public void writeString(String s) throws IOException {
     writeBytes(ByteArrayWrapper.of(s.getBytes(Charset.defaultCharset())));
-  }
-
-  public <K, V> void writeMap(Map<K, V> map, Serializer<K> keySerializer, Serializer<V> valueSerializer) throws IOException {
-    writeInt(map.size());
-    for (var entry : map.entrySet()) {
-      keySerializer.serialize(this, entry.getKey());
-      valueSerializer.serialize(this, entry.getValue());
-    }
   }
 }

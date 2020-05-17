@@ -4,7 +4,6 @@ import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.PeekingIterator;
-import dbf0.common.ByteArrayWrapper;
 import dbf0.disk_key_value.readonly.KeyValueFileIterator;
 import dbf0.disk_key_value.readonly.KeyValueFileReader;
 import org.apache.commons.lang3.tuple.Pair;
@@ -14,11 +13,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@VisibleForTesting class ValueSelectorIterator implements Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> {
+@VisibleForTesting class ValueSelectorIterator<K, V> implements Iterator<Pair<K, V>> {
 
-  private final PeekingIterator<KeyValueRank> sortedIterator;
+  private final PeekingIterator<KeyValueRank<K, V>> sortedIterator;
 
-  ValueSelectorIterator(Iterator<KeyValueRank> sortedIterator) {
+  ValueSelectorIterator(Iterator<KeyValueRank<K, V>> sortedIterator) {
     this.sortedIterator = Iterators.peekingIterator(sortedIterator);
   }
 
@@ -26,7 +25,7 @@ import java.util.stream.Collectors;
     return sortedIterator.hasNext();
   }
 
-  @Override public Pair<ByteArrayWrapper, ByteArrayWrapper> next() {
+  @Override public Pair<K, V> next() {
     var first = sortedIterator.next();
     var key = first.key;
     var highestRank = first.rank;
@@ -42,31 +41,32 @@ import java.util.stream.Collectors;
   }
 
   @VisibleForTesting
-  static ValueSelectorIterator createSortedAndSelectedIterator(List<KeyValueFileReader> orderedReaders) {
+  static <K, V> ValueSelectorIterator<K, V> createSortedAndSelectedIterator(List<KeyValueFileReader<K, V>> orderedReaders,
+                                                                            Comparator<K> keyComparator) {
     var rankedIterators = StreamUtils.zipWithIndex(orderedReaders.stream().map(KeyValueFileIterator::new))
         .map(indexedIterator -> addRank(indexedIterator.getValue(), (int) indexedIterator.getIndex()))
         .collect(Collectors.toList());
-    var mergeSortedIterator = Iterators.mergeSorted(rankedIterators, Comparator.comparing(KeyValueRank::getKey));
-    return new ValueSelectorIterator(mergeSortedIterator);
+    var mergeSortedIterator = Iterators.mergeSorted(rankedIterators, Comparator.comparing(KeyValueRank::getKey, keyComparator));
+    return new ValueSelectorIterator<>(mergeSortedIterator);
   }
 
-  static Iterator<KeyValueRank> addRank(Iterator<Pair<ByteArrayWrapper, ByteArrayWrapper>> iterator, int rank) {
-    return Iterators.transform(iterator, pair -> new KeyValueRank(pair.getKey(), pair.getValue(), rank));
+  static <K, V> Iterator<KeyValueRank<K, V>> addRank(Iterator<Pair<K, V>> iterator, int rank) {
+    return Iterators.transform(iterator, pair -> new KeyValueRank<>(pair.getKey(), pair.getValue(), rank));
   }
 
   @VisibleForTesting
-  static class KeyValueRank {
-    final ByteArrayWrapper key;
-    final ByteArrayWrapper value;
+  static class KeyValueRank<K, V> {
+    final K key;
+    final V value;
     final int rank;
 
-    KeyValueRank(ByteArrayWrapper key, ByteArrayWrapper value, int rank) {
+    KeyValueRank(K key, V value, int rank) {
       this.key = key;
       this.value = value;
       this.rank = rank;
     }
 
-    ByteArrayWrapper getKey() {
+    K getKey() {
       return key;
     }
   }

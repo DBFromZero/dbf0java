@@ -4,13 +4,14 @@ import dbf0.common.ByteArrayWrapper;
 
 import java.io.ByteArrayOutputStream;
 
-public class ByteSerializationHelper extends SerializationHelper {
+@Deprecated
+public class ByteDeprecatedSerializationHelper extends DeprecatedSerializationHelper {
 
-  public ByteSerializationHelper(int size) {
+  public ByteDeprecatedSerializationHelper(int size) {
     super(new ByteArrayOutputStream(size));
   }
 
-  public ByteSerializationHelper() {
+  public ByteDeprecatedSerializationHelper() {
     this(2048);
   }
 

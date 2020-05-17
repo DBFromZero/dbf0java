@@ -8,7 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Arrays;
 import java.util.Random;
 
-public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
+public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
 
   private final byte[] array;
 
@@ -50,21 +50,18 @@ public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
     return array;
   }
 
-  @Override
-  public boolean equals(Object o) {
+  @Override public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     ByteArrayWrapper that = (ByteArrayWrapper) o;
     return Arrays.equals(array, that.array);
   }
 
-  @Override
-  public int hashCode() {
+  @Override public int hashCode() {
     return Arrays.hashCode(array);
   }
 
-  @Override
-  public int compareTo(@NotNull ByteArrayWrapper o) {
+  @Override public int compareTo(@NotNull ByteArrayWrapper o) {
     return Arrays.compare(array, o.array);
   }
 
@@ -78,15 +75,19 @@ public class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
 
   @Override
   public String toString() {
-    if (length() <= 16) {
-      return Hex.encodeHexString(array);
+    if (length() <= 8) {
+      return hexString();
     } else {
       return MoreObjects.toStringHelper(this)
-          .add("prefix", slice(0, 8).toString())
+          .add("prefix", slice(0, 8).hexString())
           .add("length", length())
           .add("hash", hashCode())
           .toString();
     }
+  }
+
+  @NotNull public String hexString() {
+    return new String(Hex.encodeHex(array, false));
   }
 
   public ByteArrayWrapper slice(int start, int end) {

@@ -1,7 +1,7 @@
 package dbf0.socketer_server;
 
 import com.google.common.base.Preconditions;
-import dbf0.common.Dbf0Util;
+import dbf0.common.io.IOUtil;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -93,7 +93,7 @@ public class Server extends Thread {
   private void processConnection(Socket socket) {
     try (socket) {
       var buffer = new byte[Constants.MSG_LENGTH];
-      Dbf0Util.readArrayFully(socket.getInputStream(), buffer);
+      IOUtil.readArrayFully(socket.getInputStream(), buffer);
       socket.getOutputStream().write(buffer);
     } catch (IOException e) {
       e.printStackTrace();

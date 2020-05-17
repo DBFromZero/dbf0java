@@ -4,8 +4,9 @@ import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.IoConsumer;
+import dbf0.common.io.IoConsumer;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Random;
 import java.util.logging.Level;
@@ -38,7 +39,7 @@ public class WriteSortedKeyValueFiles {
         .mapToObj(ignored -> ByteArrayWrapper.random(random, KEY_LENGTH))
         .sorted();
 
-    try (var storage = new KeyValueFileWriter(path)) {
+    try (var storage = KeyValueFileWriter.forByteArrays(new FileOutputStream(path))) {
       StreamUtils.zipWithIndex(sortedKeys).forEach(IoConsumer.wrap(indexed -> {
         if (indexed.getIndex() % 10000 == 0) {
           LOGGER.fine(() -> "Writing entry " + indexed.getIndex() + " of " + path);

@@ -1,7 +1,7 @@
 package dbf0.socketer_server;
 
 import com.google.common.base.Preconditions;
-import dbf0.common.Dbf0Util;
+import dbf0.common.io.IOUtil;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.IOException;
@@ -73,7 +73,7 @@ public class Client extends Thread {
           Preconditions.checkState(old == null);
           try {
             s.getOutputStream().write(sendMsg);
-            Dbf0Util.readArrayFully(s.getInputStream(), recvMsg);
+            IOUtil.readArrayFully(s.getInputStream(), recvMsg);
           } catch (SocketException e) {
             if (socket.get() == null) {
               return;

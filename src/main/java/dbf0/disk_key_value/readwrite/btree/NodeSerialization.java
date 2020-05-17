@@ -2,8 +2,8 @@ package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import dbf0.disk_key_value.io.DeprecatedSerializationHelper;
 import dbf0.disk_key_value.io.DeserializationHelper;
-import dbf0.disk_key_value.io.SerializationHelper;
 import dbf0.disk_key_value.io.SerializationPair;
 
 import java.io.IOException;
@@ -30,7 +30,7 @@ public class NodeSerialization<K extends Comparable<K>, V> {
     this.valueSerializationPair = valueSerializationPair;
   }
 
-  void serialize(SerializationHelper helper, Node<K, V> node) throws IOException {
+  void serialize(DeprecatedSerializationHelper helper, Node<K, V> node) throws IOException {
     var type = NODE_CLASS_TO_BYTE.get(node.getClass());
     Preconditions.checkArgument(type != null, "bad node type %s", node);
     helper.writeByte(type);

@@ -1,37 +1,45 @@
 package dbf0.common;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
 // https://en.wikipedia.org/wiki/Reservoir_sampling
 public class ReservoirSampler<T> {
-  private final List<T> keys = new ArrayList<>();
-  private final int maxKeys = 10 * 1000;
+  private final List<T> sample;
+  private final int maxElements;
   private final Random random;
-  private int keysSeen = 0;
 
-  public ReservoirSampler(Random random) {
+  private int seen = 0;
+
+  public ReservoirSampler(Random random, int maxElements) {
     this.random = random;
+    this.maxElements = maxElements;
+    this.sample = new ArrayList<>(maxElements);
   }
 
   public boolean isEmpty() {
-    return keys.isEmpty();
+    return sample.isEmpty();
   }
 
-  public void add(T key) {
-    if (keys.size() <= maxKeys) {
-      keys.add(key);
+  public void add(T x) {
+    if (sample.size() < maxElements) {
+      sample.add(x);
     } else {
-      int i = random.nextInt(keysSeen);
-      if (i < keys.size()) {
-        keys.set(i, key);
+      int i = random.nextInt(seen);
+      if (i < maxElements) {
+        sample.set(i, x);
       }
     }
-    keysSeen++;
+    seen++;
   }
 
   public T sample() {
-    return keys.get(random.nextInt(keys.size()));
+    return sample.get(random.nextInt(sample.size()));
+  }
+
+  public List<T> getSampled() {
+    return Collections.unmodifiableList(sample);
   }
 }

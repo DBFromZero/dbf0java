@@ -1,17 +1,17 @@
 package dbf0.disk_key_value.io;
 
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.Dbf0Util;
-import dbf0.common.PrefixIo;
+import dbf0.common.io.IOUtil;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-import static dbf0.disk_key_value.io.SerializationHelper.INT_BYTES;
-import static dbf0.disk_key_value.io.SerializationHelper.LONG_BYTES;
+import static dbf0.disk_key_value.io.DeprecatedSerializationHelper.INT_BYTES;
+import static dbf0.disk_key_value.io.DeprecatedSerializationHelper.LONG_BYTES;
 
+@Deprecated
 public class DeserializationHelper {
 
   protected final InputStream inputStream;
@@ -41,12 +41,12 @@ public class DeserializationHelper {
   }
 
   public ByteArrayWrapper readBytes() throws IOException {
-    return PrefixIo.readBytes(inputStream);
+    return IOUtil.readBytes(inputStream);
   }
 
   private ByteBuffer readByteBuffer(int length) throws IOException {
     var bytes = new byte[length];
-    Dbf0Util.readArrayFully(inputStream, bytes);
+    IOUtil.readArrayFully(inputStream, bytes);
     return ByteBuffer.wrap(bytes);
   }
 }

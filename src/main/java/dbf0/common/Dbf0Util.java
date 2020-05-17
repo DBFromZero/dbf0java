@@ -3,8 +3,6 @@ package dbf0.common;
 import com.google.common.collect.ImmutableList;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Spliterators;
@@ -64,20 +62,14 @@ public class Dbf0Util {
     }
   }
 
-  public static void readArrayFully(InputStream s, byte[] bs) throws IOException {
-    int i = 0, n;
-    while (i < bs.length && (n = s.read(bs, i, bs.length - i)) != -1) {
-      i += n;
-    }
-    if (i != bs.length) {
-      throw new EndOfStream("Failed to read full message. Only read " + i + " bytes");
-    }
-  }
-
   public static <T> Stream<T> iteratorStream(Iterator<T> iterator) {
     return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, 0), false);
   }
 
+  /**
+   * Use {@code FileDirectoryOperations} instead
+   */
+  @Deprecated
   public static void requireEmptyDirectory(String directory) {
     var d = new File(directory);
     if (d.isDirectory()) {
@@ -105,5 +97,13 @@ public class Dbf0Util {
 
   public static String formatBytes(long bytes) {
     return formatSize(bytes) + "B";
+  }
+
+  public static int safeLongToInt(long l) {
+    int i = (int) l;
+    if (i != l) {
+      throw new IllegalArgumentException("Cannot safely convert " + l + " to an integer");
+    }
+    return i;
   }
 }

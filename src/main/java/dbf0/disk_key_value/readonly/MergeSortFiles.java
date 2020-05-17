@@ -4,10 +4,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
-import dbf0.common.IoFunction;
-import dbf0.common.PositionTrackingStream;
+import dbf0.common.io.ByteArraySerializer;
+import dbf0.common.io.IoFunction;
+import dbf0.common.io.PositionTrackingStream;
+import dbf0.common.io.UnsignedLongSerializer;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
@@ -36,7 +39,7 @@ public class MergeSortFiles {
     indexSpecs.forEach(spec -> LOGGER.info("  Index rate " + spec.getRight() + " in " + spec.getLeft()));
 
     var iterators = IntStream.range(0, sortedFilesCount).boxed().map(IoFunction.wrap(index ->
-        new KeyValueFileIterator(new KeyValueFileReader(sortedFilesDirectory + "/" + index))))
+        new KeyValueFileIterator<>(KeyValueFileReader.forByteArrays(sortedFilesDirectory + "/" + index))))
         .collect(Collectors.toList());
     @SuppressWarnings("UnstableApiUsage") var sortedIterator = Iterators.mergeSorted(iterators, Map.Entry.comparingByKey());
 
@@ -44,7 +47,7 @@ public class MergeSortFiles {
         indexSpecs.stream().map(MergeSortFiles::createIndexBuilder).collect(Collectors.toList()));
 
     try (var outputStream = new PositionTrackingStream(outputFilePath)) {
-      try (var storage = new KeyValueFileWriter(outputStream)) {
+      try (var storage = KeyValueFileWriter.forByteArrays(outputStream)) {
         ByteArrayWrapper lastKey = null;
         int i = 0;
         while (sortedIterator.hasNext()) {
@@ -73,9 +76,11 @@ public class MergeSortFiles {
     return Pair.of(parts[0], rate);
   }
 
-  private static IndexBuilder createIndexBuilder(Pair<String, Integer> spec) {
+  private static IndexBuilder<ByteArrayWrapper> createIndexBuilder(Pair<String, Integer> spec) {
     try {
-      return IndexBuilder.indexBuilder(new KeyValueFileWriter(spec.getLeft()), spec.getRight());
+      return IndexBuilder.indexBuilder(new KeyValueFileWriter<>(ByteArraySerializer.getInstance(),
+              UnsignedLongSerializer.getInstance(), new FileOutputStream(spec.getLeft())),
+          spec.getRight());
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

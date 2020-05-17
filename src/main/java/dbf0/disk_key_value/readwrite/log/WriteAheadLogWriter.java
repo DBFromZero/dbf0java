@@ -2,7 +2,7 @@ package dbf0.disk_key_value.readwrite.log;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
-import dbf0.common.PrefixIo;
+import dbf0.common.io.IOUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.BufferedOutputStream;
@@ -32,8 +32,8 @@ public class WriteAheadLogWriter implements Closeable {
   public synchronized void logPut(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
     Preconditions.checkState(outputStream != null, "%s is already closed", name);
     outputStream.write(WriteAheadLogConstants.PUT);
-    PrefixIo.writeBytes(outputStream, key);
-    PrefixIo.writeBytes(outputStream, value);
+    IOUtil.writeBytes(outputStream, key);
+    IOUtil.writeBytes(outputStream, value);
     outputStream.flush();
     logSynchronizer.registerLog();
   }
@@ -41,7 +41,7 @@ public class WriteAheadLogWriter implements Closeable {
   public synchronized void logDelete(@NotNull ByteArrayWrapper key) throws IOException {
     Preconditions.checkState(outputStream != null, "%s is already closed", name);
     outputStream.write(WriteAheadLogConstants.DELETE);
-    PrefixIo.writeBytes(outputStream, key);
+    IOUtil.writeBytes(outputStream, key);
     outputStream.flush();
     logSynchronizer.registerLog();
   }

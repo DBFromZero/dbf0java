@@ -2,7 +2,7 @@ package dbf0.disk_key_value.readwrite.blocks;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
-import dbf0.disk_key_value.io.ByteSerializationHelper;
+import dbf0.disk_key_value.io.ByteDeprecatedSerializationHelper;
 import dbf0.disk_key_value.io.DeserializationHelper;
 
 import java.io.IOException;
@@ -16,10 +16,10 @@ public class MemoryBlockStorage implements BlockStorage {
   private Map<Long, ByteArrayWrapper> blocks = new HashMap<>();
   private int nextBlockId = 1000;
 
-  private class MemoryBlockWriter extends BaseBlockWriter<ByteSerializationHelper> {
+  private class MemoryBlockWriter extends BaseBlockWriter<ByteDeprecatedSerializationHelper> {
 
     public MemoryBlockWriter(long blockId) {
-      super(blockId, new ByteSerializationHelper());
+      super(blockId, new ByteDeprecatedSerializationHelper());
     }
 
     @Override public void commit() {
