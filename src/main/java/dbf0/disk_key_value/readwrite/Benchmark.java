@@ -17,8 +17,8 @@ import dbf0.disk_key_value.readwrite.btree.*;
 import dbf0.disk_key_value.readwrite.log.FrequencyLogSynchronizer;
 import dbf0.disk_key_value.readwrite.log.ImmediateLogSynchronizer;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
-import dbf0.disk_key_value.readwrite.lsmtree.LsmTree;
 import dbf0.disk_key_value.readwrite.lsmtree.LsmTreeConfiguration;
+import dbf0.disk_key_value.readwrite.lsmtree.singlevalue.LsmTree;
 import dbf0.test.PutDeleteGet;
 import org.apache.commons.lang3.StringUtils;
 

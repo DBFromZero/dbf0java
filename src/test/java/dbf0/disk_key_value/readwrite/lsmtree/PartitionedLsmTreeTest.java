@@ -7,6 +7,7 @@ import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
 import dbf0.disk_key_value.io.ReadOnlyFileOperations;
 import dbf0.disk_key_value.readwrite.HashPartitionedReadWriteStorage;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
+import dbf0.disk_key_value.readwrite.lsmtree.singlevalue.LsmTree;
 import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
 import dbf0.test.RandomSeed;

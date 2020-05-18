@@ -1,13 +1,10 @@
-package dbf0.disk_key_value.readwrite.lsmtree;
+package dbf0.disk_key_value.readwrite.lsmtree.base;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Streams;
 import dbf0.common.Dbf0Util;
-import dbf0.common.io.*;
+import dbf0.common.io.PositionTrackingStream;
 import dbf0.disk_key_value.io.FileOperations;
-import dbf0.disk_key_value.readonly.IndexBuilder;
-import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileReader;
-import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileWriter;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
@@ -15,6 +12,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -25,26 +23,48 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
+public class BaseDeltaMergerCron<T extends OutputStream> {
+
+  public static class ShutdownWhileMerging extends Exception {
+    public ShutdownWhileMerging() {
+    }
+  }
+
+  public interface ShutdownChecker {
+    void checkShutdown() throws ShutdownWhileMerging;
+  }
+
+  public interface Merger {
+    void merge(List<BufferedInputStream> orderedInputStreams,
+               PositionTrackingStream baseOutputStream, BufferedOutputStream indexOutputStream,
+               ShutdownChecker shutdownChecker)
+        throws IOException, ShutdownWhileMerging;
+  }
 
   private static final Logger LOGGER = Dbf0Util.getLogger(BaseDeltaMergerCron.class);
-  private static final int BUFFER_SIZE = 0x4000;
+  public static final int BUFFER_SIZE = 0x4000;
 
-  private final LsmTreeConfiguration<K, V> configuration;
-  private final BaseDeltaFiles<T, K, V> baseDeltaFiles;
+  private final BaseDeltaFiles<T, ?, ?, ?> baseDeltaFiles;
   private final ScheduledExecutorService executor;
+  private final Duration checkFrequency;
+  private final double maxDeltaReadPercentage;
+  private final Merger merger;
 
   private boolean started = false;
   private boolean shutdown = false;
   private boolean hasError = false;
   private ScheduledFuture<?> checkFuture;
 
-  public BaseDeltaMergerCron(LsmTreeConfiguration<K, V> configuration,
-                             BaseDeltaFiles<T, K, V> baseDeltaFiles,
-                             ScheduledExecutorService executor) {
-    this.configuration = configuration;
+  public BaseDeltaMergerCron(BaseDeltaFiles<T, ?, ?, ?> baseDeltaFiles,
+                             ScheduledExecutorService executor,
+                             Duration checkFrequency,
+                             double maxDeltaReadPercentage,
+                             Merger merger) {
     this.baseDeltaFiles = baseDeltaFiles;
     this.executor = executor;
+    this.checkFrequency = checkFrequency;
+    this.maxDeltaReadPercentage = maxDeltaReadPercentage;
+    this.merger = merger;
   }
 
   public boolean hasErrors() {
@@ -62,7 +82,7 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
       return;
     }
     if (checkFuture != null) {
-      checkFuture.cancel(true);
+      checkFuture.cancel(false);
       checkFuture = null;
     }
     shutdown = true;
@@ -77,7 +97,7 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
           monitor.notify();
         }
       }
-    }, 0, 100, TimeUnit.MILLISECONDS);
+    }, 0, 250, TimeUnit.MILLISECONDS);
     synchronized (monitor) {
       monitor.wait();
       future.cancel(false);
@@ -92,7 +112,7 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
       checkForDeltasInternal();
       synchronized (this) {
         if (!shutdown) {
-          checkFuture = executor.schedule(this::checkForDeltas, configuration.getMergeCronFrequency().toMillis(), TimeUnit.MILLISECONDS);
+          checkFuture = executor.schedule(this::checkForDeltas, checkFrequency.toMillis(), TimeUnit.MILLISECONDS);
         }
       }
     } catch (ShutdownWhileMerging e) {
@@ -116,27 +136,20 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
 
     var baseOperations = baseDeltaFiles.getBaseOperations();
     var baseSize = baseOperations.length();
-    var maxDeltaReadPercentage = configuration.getMaxDeltaReadPercentage();
     var maxDeltaSize = (long) ((double) baseSize * maxDeltaReadPercentage / (1 - maxDeltaReadPercentage));
     LOGGER.fine(() -> "base size " + Dbf0Util.formatBytes(baseSize) +
         " max delta size " + Dbf0Util.formatBytes(maxDeltaSize));
 
     var orderedDeltaOpsForMerge = collectDeltaOpsForMerge(orderedDeltasInUse, maxDeltaSize);
-    var valueSerialization = configuration.getValueSerialization();
-    if (valueSerialization.getSerializer().isByteArrayEquivalent()) {
-      // optimization to avoid de-serializing values when the value is size prefixed
-      mergeDeltasAndCommit(orderedDeltaOpsForMerge, ByteArraySerializer.serializationPair(),
-          valueSerialization.getSerializer().serializeToBytes(configuration.getDeleteValue()));
-    } else {
-      mergeDeltasAndCommit(orderedDeltaOpsForMerge, valueSerialization, configuration.getDeleteValue());
-    }
+    mergeDeltasAndCommit(orderedDeltaOpsForMerge);
     for (var deltaPair : orderedDeltaOpsForMerge) {
       baseDeltaFiles.deleteDelta(deltaPair.getKey());
     }
   }
 
   @NotNull
-  private List<Pair<Integer, FileOperations<T>>> collectDeltaOpsForMerge(List<Integer> orderedDeltasInUse, long maxDeltaSize) {
+  private List<Pair<Integer, FileOperations<T>>> collectDeltaOpsForMerge(List<Integer> orderedDeltasInUse,
+                                                                         long maxDeltaSize) {
     List<Pair<Integer, FileOperations<T>>> deltaOpsForMerge = new ArrayList<>();
     long sumDeltaSize = 0;
     // start with the oldest deltas first and it is important to maintain order
@@ -157,9 +170,8 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
     return deltaOpsForMerge;
   }
 
-  private <X> void mergeDeltasAndCommit(List<Pair<Integer, FileOperations<T>>> orderedDeltaOpsForMerge,
-                                        SerializationPair<X> valueSerialization, X deleteValueX
-  ) throws IOException, ShutdownWhileMerging {
+  private void mergeDeltasAndCommit(List<Pair<Integer, FileOperations<T>>> orderedDeltaOpsForMerge)
+      throws IOException, ShutdownWhileMerging {
     LOGGER.info(() -> "Merging base with " + orderedDeltaOpsForMerge.size() + " deltas " +
         orderedDeltaOpsForMerge.stream().map(Pair::getLeft).collect(Collectors.toList()));
     Preconditions.checkState(!orderedDeltaOpsForMerge.isEmpty());
@@ -172,24 +184,24 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
       LOGGER.fine("Total input size " + Dbf0Util.formatBytes(totalSize));
     }
 
-    // order readers as base and the deltas in descending age such that we prefer that last
+    // order stream as base and the deltas in descending age such that we prefer that last
     // entry for a single key
-    var orderedReaders = new ArrayList<KeyValueFileReader<K, X>>(1 + orderedDeltaOpsForMerge.size());
+    var orderedInputStream = new ArrayList<BufferedInputStream>(1 + orderedDeltaOpsForMerge.size());
     FileOperations.OverWriter<T> baseOverWriter = null, baseIndexOverWriter = null;
     try {
-      orderedReaders.add(batchReader(baseOperations, valueSerialization.getDeserializer()));
+      orderedInputStream.add(inputStream(baseOperations));
       for (var deltaPair : orderedDeltaOpsForMerge) {
-        orderedReaders.add(batchReader(deltaPair.getRight(), valueSerialization.getDeserializer()));
+        orderedInputStream.add(inputStream(deltaPair.getRight()));
       }
-      var selectedIterator = ValueSelectorIterator.createSortedAndSelectedIterator(
-          orderedReaders, configuration.getKeyComparator());
+
       baseOverWriter = baseOperations.createOverWriter();
       baseIndexOverWriter = baseIndexOperations.createOverWriter();
+
       try (var outputStream = new PositionTrackingStream(baseOverWriter.getOutputStream(), BUFFER_SIZE)) {
-        try (var indexWriter = new KeyValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
-            UnsignedLongSerializer.getInstance(),
-            new BufferedOutputStream(baseIndexOverWriter.getOutputStream(), BUFFER_SIZE))) {
-          writeMerged(selectedIterator, outputStream, indexWriter, valueSerialization.getSerializer(), deleteValueX);
+        try (var indexOutputStream = new BufferedOutputStream(baseIndexOverWriter.getOutputStream(), BUFFER_SIZE)) {
+          merger.merge(orderedInputStream, outputStream, indexOutputStream, () -> {
+            if (shutdown) throw new ShutdownWhileMerging();
+          });
         }
       }
       baseDeltaFiles.commitNewBase(baseOverWriter, baseIndexOverWriter);
@@ -205,51 +217,13 @@ public class BaseDeltaMergerCron<T extends OutputStream, K, V> {
       }
       throw new RuntimeException("Error in merging deltas. Aborting", e);
     } finally {
-      for (var reader : orderedReaders) {
+      for (var reader : orderedInputStream) {
         reader.close();
       }
     }
   }
 
-  private <X> void writeMerged(ValueSelectorIterator<K, X> selectedIterator, PositionTrackingStream outputStream,
-                               KeyValueFileWriter<K, Long> indexWriter, Serializer<X> valueSerialize,
-                               X deleteValueX) throws IOException, ShutdownWhileMerging {
-    var indexBuilder = IndexBuilder.indexBuilder(indexWriter, configuration.getIndexRate());
-    long i = 0, count = 0;
-    var writer = new KeyValueFileWriter<>(configuration.getKeySerialization().getSerializer(), valueSerialize,
-        outputStream);
-    while (selectedIterator.hasNext()) {
-      if (i++ % 50000 == 0) {
-        if (shutdown) {
-          throw new ShutdownWhileMerging();
-        }
-        if (Thread.interrupted()) {
-          Thread.currentThread().interrupt();
-          throw new RuntimeException("interrupted while merging. aborting for fast exit");
-        }
-        if (LOGGER.isLoggable(Level.FINER)) {
-          LOGGER.finer("writing merged entry " + i + " at " + Dbf0Util.formatSize(outputStream.getPosition()));
-        }
-      }
-      var entry = selectedIterator.next();
-      if (!entry.getValue().equals(deleteValueX)) {
-        indexBuilder.accept(outputStream.getPosition(), entry.getKey());
-        writer.append(entry.getKey(), entry.getValue());
-        count++;
-      }
-    }
-    LOGGER.fine("wrote " + count + " key/value pairs to new base with size " +
-        Dbf0Util.formatSize(outputStream.getPosition()));
-  }
-
-  private <X> KeyValueFileReader<K, X> batchReader(FileOperations<T> baseIndexFileOperations,
-                                                   Deserializer<X> valueDeserializer) throws IOException {
-    return new KeyValueFileReader<K, X>(configuration.getKeySerialization().getDeserializer(), valueDeserializer,
-        new BufferedInputStream(baseIndexFileOperations.createInputStream(), BUFFER_SIZE));
-  }
-
-  private static class ShutdownWhileMerging extends Exception {
-    public ShutdownWhileMerging() {
-    }
+  private BufferedInputStream inputStream(FileOperations<T> baseIndexFileOperations) throws IOException {
+    return new BufferedInputStream(baseIndexFileOperations.createInputStream(), BUFFER_SIZE);
   }
 }

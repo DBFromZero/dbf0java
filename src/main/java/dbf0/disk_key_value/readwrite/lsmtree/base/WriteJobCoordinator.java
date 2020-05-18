@@ -1,4 +1,4 @@
-package dbf0.disk_key_value.readwrite.lsmtree;
+package dbf0.disk_key_value.readwrite.lsmtree.base;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.Dbf0Util;
@@ -9,15 +9,15 @@ import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.OutputStream;
-import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class DeltaWriterCoordinator<T extends OutputStream, K, V> {
+public class WriteJobCoordinator<T extends OutputStream, W> {
 
-  private static final Logger LOGGER = Dbf0Util.getLogger(DeltaWriterCoordinator.class);
+  private static final Logger LOGGER = Dbf0Util.getLogger(WriteJobCoordinator.class);
 
   private enum State {
     UNINITIALIZED,
@@ -25,44 +25,44 @@ public class DeltaWriterCoordinator<T extends OutputStream, K, V> {
     WRITE_DELTAS
   }
 
-  private final LsmTreeConfiguration<K, V> configuration;
-  private final BaseDeltaFiles<T, K, V> baseDeltaFiles;
+  private final BaseDeltaFiles<T, ?, ?, ?> baseDeltaFiles;
   private final ScheduledExecutorService executor;
-  private final FixedSizeBackgroundJobCoordinator<WriteSortedEntriesJob<T, K, V>> backgroundJobCoordinator;
   @Nullable private final WriteAheadLog<?> writeAheadLog;
+  private final WriteJob.SortAndWriter<T, W> writer;
+  private final FixedSizeBackgroundJobCoordinator<WriteJob<T, W>> backgroundJobCoordinator;
 
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
   private int writersCreated = 0;
   private boolean anyWriteAborted = false;
   private State state = State.UNINITIALIZED;
 
-  public DeltaWriterCoordinator(LsmTreeConfiguration<K, V> configuration,
-                                BaseDeltaFiles<T, K, V> baseDeltaFiles,
-                                ScheduledExecutorService executor,
-                                @Nullable WriteAheadLog<?> writeAheadLog) {
-    this.configuration = configuration;
+  public WriteJobCoordinator(BaseDeltaFiles<T, ?, ?, ?> baseDeltaFiles,
+                             ScheduledExecutorService executor,
+                             @Nullable WriteAheadLog<?> writeAheadLog,
+                             WriteJob.SortAndWriter<T, W> writer,
+                             int maxInFlightJobs) {
     this.baseDeltaFiles = baseDeltaFiles;
     this.executor = executor;
     this.writeAheadLog = writeAheadLog;
-    this.backgroundJobCoordinator = new FixedSizeBackgroundJobCoordinator<>(executor, configuration.getMaxInFlightWriteJobs());
+    this.writer = writer;
+    this.backgroundJobCoordinator = new FixedSizeBackgroundJobCoordinator<>(executor, maxInFlightJobs);
   }
 
-  boolean isUsable() {
+  public boolean isUsable() {
     return !anyWriteAborted;
   }
 
-  boolean hasMaxInFlightWriters() {
+  public boolean hasMaxInFlightWriters() {
     return backgroundJobCoordinator.hasMaxInFlightJobs();
   }
 
-  boolean hasInFlightWriters() {
+  public boolean hasInFlightWriters() {
     return backgroundJobCoordinator.hasInFlightJobs();
   }
 
-  void addWrites(PendingWritesAndLog<K, V> originalWrites) {
+  public void addWrites(PendingWritesAndLog<W> writes) {
     Preconditions.checkState(!hasMaxInFlightWriters());
     Preconditions.checkState(isUsable());
-    var writes = new PendingWritesAndLog<>(Collections.unmodifiableMap(originalWrites.writes), originalWrites.logWriter);
     synchronized (this) {
       if (state == State.UNINITIALIZED) {
         if (baseDeltaFiles.hasInUseBase()) {
@@ -87,28 +87,20 @@ public class DeltaWriterCoordinator<T extends OutputStream, K, V> {
     backgroundJobCoordinator.awaitNextJobCompletion();
   }
 
-  @Nullable V searchForKeyInWritesInProgress(K key) {
-    var jobs = backgroundJobCoordinator.getCurrentInFlightJobs();
-    for (int i = jobs.size() - 1; i >= 0; i--) {
-      var value = jobs.get(i).getPendingWritesAndLog().writes.get(key);
-      if (value != null) {
-        return value;
-      }
-    }
-    return null;
+  public List<WriteJob<T, W>> getCurrentInFlightJobs() {
+    return backgroundJobCoordinator.getCurrentInFlightJobs();
   }
 
   private void createWriteJob(boolean isBase, int delta,
-                              PendingWritesAndLog<K, V> writesAndLog,
+                              PendingWritesAndLog<W> writesAndLog,
                               FileOperations<T> fileOperations,
                               FileOperations<T> indexFileOperations) {
-    var job = new WriteSortedEntriesJob<>("write" + writersCreated++,
-        isBase, delta, configuration,
-        writesAndLog, fileOperations, indexFileOperations, this);
+    var job = new WriteJob<>("write" + writersCreated++, isBase, delta, writesAndLog,
+        fileOperations, indexFileOperations, this, writer);
     backgroundJobCoordinator.execute(job);
   }
 
-  void commitWrites(WriteSortedEntriesJob<T, K, V> writer) {
+  void commitWrites(WriteJob<T, W> writer) {
     if (anyWriteAborted) {
       LOGGER.warning("Not committing " + writer.getName() + " since an earlier writer aborted");
       abortWrites(writer);
@@ -126,7 +118,7 @@ public class DeltaWriterCoordinator<T extends OutputStream, K, V> {
     }
   }
 
-  private void commitWritesWithLogging(WriteSortedEntriesJob<T, K, V> writer) {
+  private void commitWritesWithLogging(WriteJob<T, W> writer) {
     try {
       if (state == State.WRITING_BASE) {
         Preconditions.checkState(writer.isBase());
@@ -136,7 +128,7 @@ public class DeltaWriterCoordinator<T extends OutputStream, K, V> {
         Preconditions.checkState(state == State.WRITE_DELTAS);
         baseDeltaFiles.addDelta(writer.getDelta());
       }
-      var logWriter = writer.getPendingWritesAndLog().logWriter;
+      var logWriter = writer.getPendingWritesAndLog().getLogWriter();
       if (logWriter != null) {
         Preconditions.checkState(writeAheadLog != null);
         writeAheadLog.freeWriter(logWriter.getName());
@@ -147,7 +139,7 @@ public class DeltaWriterCoordinator<T extends OutputStream, K, V> {
     }
   }
 
-  void reattemptCommitWrites(WriteSortedEntriesJob<T, K, V> writer, int count) {
+  private void reattemptCommitWrites(WriteJob<T, W> writer, int count) {
     LOGGER.info(() -> "Reattempting " + writer.getName() + " count=" + count);
     Preconditions.checkState(!writer.isBase());
     if (state == State.WRITING_BASE) {
@@ -169,7 +161,7 @@ public class DeltaWriterCoordinator<T extends OutputStream, K, V> {
     }
   }
 
-  void abortWrites(WriteSortedEntriesJob<T, K, V> writer) {
+  void abortWrites(WriteJob<T, W> writer) {
     anyWriteAborted = true;
     LOGGER.warning("Aborting " + writer.getName());
   }

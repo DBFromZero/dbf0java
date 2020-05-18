@@ -1,4 +1,4 @@
-package dbf0.disk_key_value.readwrite.lsmtree;
+package dbf0.disk_key_value.readwrite.lsmtree.singlevalue;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
@@ -8,10 +8,16 @@ import dbf0.common.ReadWriteLockHelper;
 import dbf0.disk_key_value.io.FileDirectoryOperations;
 import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
 import dbf0.disk_key_value.io.MemoryFileOperations;
+import dbf0.disk_key_value.readonly.singlevalue.RandomAccessKeyValueFileReader;
 import dbf0.disk_key_value.readwrite.ReadWriteStorage;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageWithBackgroundTasks;
 import dbf0.disk_key_value.readwrite.log.LogConsumer;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
+import dbf0.disk_key_value.readwrite.lsmtree.LsmTreeConfiguration;
+import dbf0.disk_key_value.readwrite.lsmtree.base.BaseDeltaFiles;
+import dbf0.disk_key_value.readwrite.lsmtree.base.BaseDeltaMergerCron;
+import dbf0.disk_key_value.readwrite.lsmtree.base.PendingWritesAndLog;
+import dbf0.disk_key_value.readwrite.lsmtree.base.WriteJobCoordinator;
 import dbf0.document.types.DElement;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
@@ -21,6 +27,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -32,40 +40,22 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
 
   public static class Builder<T extends OutputStream, K, V> {
 
-    private final LsmTreeConfiguration<K, V> configuration;
-
-    private BaseDeltaFiles<T, K, V> baseDeltaFiles;
-    private DeltaWriterCoordinator<T, K, V> deltaWriterCoordinator;
-    private BaseDeltaMergerCron<T, K, V> mergerCron;
-    private ScheduledExecutorService executorService;
-    private WriteAheadLog<?> writeAheadLog;
-
+    protected final LsmTreeConfiguration<K, V> configuration;
+    protected BaseDeltaFiles<T, K, V, RandomAccessKeyValueFileReader<K, V>> baseDeltaFiles;
+    protected ScheduledExecutorService executorService;
+    protected WriteAheadLog<?> writeAheadLog;
 
     public Builder(final LsmTreeConfiguration<K, V> configuration) {
       this.configuration = Preconditions.checkNotNull(configuration);
     }
 
-
-    public Builder<T, K, V> withBaseDeltaFiles(BaseDeltaFiles<T, K, V> baseDeltaFiles) {
-      this.baseDeltaFiles = Preconditions.checkNotNull(baseDeltaFiles);
-      return this;
-    }
-
     public Builder<T, K, V> withBaseDeltaFiles(FileDirectoryOperations<T> fileDirectoryOperations) {
-      return withBaseDeltaFiles(new BaseDeltaFiles<>(
-          configuration.getKeySerialization().getDeserializer(),
-          configuration.getValueSerialization().getDeserializer(),
-          configuration.getKeyComparator(),
-          fileDirectoryOperations));
-    }
-
-    public Builder<T, K, V> withDeltaWriteCoordinator(DeltaWriterCoordinator<T, K, V> coordinator) {
-      this.deltaWriterCoordinator = Preconditions.checkNotNull(coordinator);
-      return this;
-    }
-
-    public Builder<T, K, V> withMergerCron(BaseDeltaMergerCron<T, K, V> mergerCron) {
-      this.mergerCron = Preconditions.checkNotNull(mergerCron);
+      this.baseDeltaFiles = new BaseDeltaFiles<>(fileDirectoryOperations,
+          (baseOperations, indexOperations) -> RandomAccessKeyValueFileReader.open(
+              configuration.getKeySerialization().getDeserializer(),
+              configuration.getValueSerialization().getDeserializer(),
+              configuration.getKeyComparator(),
+              baseOperations, indexOperations));
       return this;
     }
 
@@ -94,18 +84,14 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
 
     private Pair<LsmTree<T, K, V>, ExecutorService> buildInternal() {
       Preconditions.checkState(baseDeltaFiles != null, "must specify baseDeltaFiles");
-      ScheduledExecutorService executorService = this.executorService;
+      var executorService = this.executorService;
       if (executorService == null) {
         executorService = Executors.newScheduledThreadPool(4);
       }
-      DeltaWriterCoordinator<T, K, V> coordinator = this.deltaWriterCoordinator;
-      if (coordinator == null) {
-        coordinator = new DeltaWriterCoordinator<>(configuration, baseDeltaFiles, executorService, writeAheadLog);
-      }
-      BaseDeltaMergerCron<T, K, V> mergerCron = this.mergerCron;
-      if (mergerCron == null) {
-        mergerCron = new BaseDeltaMergerCron<>(configuration, baseDeltaFiles, executorService);
-      }
+      var coordinator = new WriteJobCoordinator<>(baseDeltaFiles, executorService, writeAheadLog,
+          new SortAndWriteKeyValues<>(configuration), configuration.getMaxInFlightWriteJobs());
+      var mergerCron = new BaseDeltaMergerCron<>(baseDeltaFiles, executorService, configuration.getMergeCronFrequency(),
+          configuration.getMaxDeltaReadPercentage(), LsmTreeMerger.create(configuration));
       return Pair.of(new LsmTree<>(configuration, baseDeltaFiles, coordinator, mergerCron, writeAheadLog),
           executorService);
     }
@@ -157,18 +143,18 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
   }
 
   private final LsmTreeConfiguration<K, V> configuration;
-  private final BaseDeltaFiles<T, K, V> baseDeltaFiles;
-  private final DeltaWriterCoordinator<T, K, V> coordinator;
-  private final BaseDeltaMergerCron<T, K, V> mergerCron;
+  private final BaseDeltaFiles<T, K, V, RandomAccessKeyValueFileReader<K, V>> baseDeltaFiles;
+  private final WriteJobCoordinator<T, Map<K, V>> coordinator;
+  private final BaseDeltaMergerCron<T> mergerCron;
   @Nullable private final WriteAheadLog<?> writeAheadLog;
 
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
-  private PendingWritesAndLog<K, V> pendingWrites;
+  private PendingWritesAndLog<Map<K, V>> pendingWrites;
 
   private LsmTree(LsmTreeConfiguration<K, V> configuration,
-                  BaseDeltaFiles<T, K, V> baseDeltaFiles,
-                  DeltaWriterCoordinator<T, K, V> coordinator,
-                  BaseDeltaMergerCron<T, K, V> mergerCron,
+                  BaseDeltaFiles<T, K, V, RandomAccessKeyValueFileReader<K, V>> baseDeltaFiles,
+                  WriteJobCoordinator<T, Map<K, V>> coordinator,
+                  BaseDeltaMergerCron<T> mergerCron,
                   @Nullable WriteAheadLog<?> writeAheadLog) {
     this.configuration = configuration;
     this.baseDeltaFiles = baseDeltaFiles;
@@ -188,11 +174,11 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
         var valueDeserializer = configuration.getValueSerialization().getDeserializer();
         return new LogConsumer() {
           @Override public void put(@NotNull ByteArrayWrapper key, @NotNull ByteArrayWrapper value) throws IOException {
-            pendingWrites.writes.put(keyDeserializer.deserialize(key), valueDeserializer.deserialize(value));
+            pendingWrites.getWrites().put(keyDeserializer.deserialize(key), valueDeserializer.deserialize(value));
           }
 
           @Override public void delete(@NotNull ByteArrayWrapper key) throws IOException {
-            pendingWrites.writes.put(keyDeserializer.deserialize(key), configuration.getDeleteValue());
+            pendingWrites.getWrites().put(keyDeserializer.deserialize(key), configuration.getDeleteValue());
           }
 
           @Override public void persist() throws IOException {
@@ -203,11 +189,9 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
         };
       });
     }
-
     mergerCron.start();
     createNewPendingWrites();
   }
-
 
   @Override public void close() throws IOException {
     mergerCron.shutdown();
@@ -216,7 +200,7 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
         if (pendingWrites == null) {
           return;
         }
-        if (!pendingWrites.writes.isEmpty()) {
+        if (!pendingWrites.getWrites().isEmpty()) {
           LOGGER.info("writing pending at close");
           if (coordinator.hasMaxInFlightWriters()) {
             LOGGER.warning("Delaying close because DeltaWriteCoordinator is backed up");
@@ -252,12 +236,12 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
     Preconditions.checkState(isUsable());
     var writesBlocked = lock.callWithWriteLock(() -> {
       Preconditions.checkState(pendingWrites != null, "is closed");
-      if (pendingWrites.logWriter != null) {
-        pendingWrites.logWriter.logPut(
+      if (pendingWrites.getLogWriter() != null) {
+        pendingWrites.getLogWriter().logPut(
             configuration.getKeySerialization().getSerializer().serializeToBytes(key),
             configuration.getValueSerialization().getSerializer().serializeToBytes(value));
       }
-      pendingWrites.writes.put(key, value);
+      pendingWrites.getWrites().put(key, value);
       return checkMergeThreshold();
     });
     if (writesBlocked) {
@@ -270,34 +254,30 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
     // search through the various containers that could contain the key in the appropriate order
     var value = lock.callWithReadLock(() -> {
       Preconditions.checkState(pendingWrites != null, "is closed");
-      return pendingWrites.writes.get(key);
+      return pendingWrites.getWrites().get(key);
     });
     if (value != null) {
       return checkForDeleteValue(value);
     }
-    value = coordinator.searchForKeyInWritesInProgress(key);
+    value = searchForKeyInWritesInProgress(key);
     if (value != null) {
       return checkForDeleteValue(value);
     }
     if (!baseDeltaFiles.hasInUseBase()) {
       return null;
     }
-    value = baseDeltaFiles.searchForKey(key);
+    value = searchForKeyInFiles(key);
     return value == null ? null : checkForDeleteValue(value);
-  }
-
-  private @Nullable V checkForDeleteValue(@NotNull V value) {
-    return value.equals(configuration.getDeleteValue()) ? null : value;
   }
 
   @Override public boolean delete(@NotNull K key) throws IOException {
     Preconditions.checkState(isUsable());
     var writesBlocked = lock.callWithWriteLock(() -> {
       Preconditions.checkState(pendingWrites != null, "is closed");
-      if (pendingWrites.logWriter != null) {
-        pendingWrites.logWriter.logDelete(configuration.getKeySerialization().getSerializer().serializeToBytes(key));
+      if (pendingWrites.getLogWriter() != null) {
+        pendingWrites.getLogWriter().logDelete(configuration.getKeySerialization().getSerializer().serializeToBytes(key));
       }
-      pendingWrites.writes.put(key, configuration.getDeleteValue());
+      pendingWrites.getWrites().put(key, configuration.getDeleteValue());
       return checkMergeThreshold();
     });
     if (writesBlocked) {
@@ -311,9 +291,52 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
     mergerCron.waitForAllDeltasToMerge();
   }
 
+  @Nullable private V checkForDeleteValue(@NotNull V value) {
+    return value.equals(configuration.getDeleteValue()) ? null : value;
+  }
+
+  @Nullable private V searchForKeyInWritesInProgress(K key) {
+    var jobs = coordinator.getCurrentInFlightJobs();
+    for (int i = jobs.size() - 1; i >= 0; i--) {
+      var value = jobs.get(i).getPendingWritesAndLog().getWrites().get(key);
+      if (value != null) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  @Nullable private V searchForKeyInFiles(K key) throws IOException {
+    // prefer the later deltas and finally the base
+    var deltaValue = recursivelySearchDeltasInReverse(baseDeltaFiles.getOrderedDeltaReaders().iterator(), key);
+    if (deltaValue != null) {
+      return deltaValue;
+    }
+    var baseWrapper = baseDeltaFiles.getBaseWrapper();
+    return baseWrapper.getLock().callWithReadLock(() -> Preconditions.checkNotNull(baseWrapper.getReader()).get(key));
+  }
+
+  @Nullable private V recursivelySearchDeltasInReverse(
+      Iterator<BaseDeltaFiles.ReaderWrapper<K, V, RandomAccessKeyValueFileReader<K, V>>> iterator,
+      K key) throws IOException {
+    if (!iterator.hasNext()) {
+      return null;
+    }
+    var wrapper = iterator.next();
+    var result = recursivelySearchDeltasInReverse(iterator, key);
+    if (result != null) {
+      return result;
+    }
+    // note that it is possible the delta was deleted while we were searching other deltas or
+    // while we were waiting for the read lock.
+    // that is fine because now the delta is in the base and we always search the deltas first
+    // so if the key was in the delta then we'll find it when we search the base
+    return wrapper.getLock().callWithReadLock(() -> wrapper.getReader() == null ? null : wrapper.getReader().get(key));
+  }
+
   // only to be called when holding the write lock
   private boolean checkMergeThreshold() throws IOException {
-    if (pendingWrites.writes.size() < configuration.getPendingWritesDeltaThreshold()) {
+    if (pendingWrites.getWrites().size() < configuration.getPendingWritesDeltaThreshold()) {
       return false;
     }
     if (coordinator.hasMaxInFlightWriters()) {
@@ -330,8 +353,8 @@ public class LsmTree<T extends OutputStream, K, V> implements ReadWriteStorage<K
   }
 
   private void sendWritesToCoordinator() throws IOException {
-    if (pendingWrites.logWriter != null) {
-      pendingWrites.logWriter.close();
+    if (pendingWrites.getLogWriter() != null) {
+      pendingWrites.getLogWriter().close();
     }
     coordinator.addWrites(pendingWrites);
   }

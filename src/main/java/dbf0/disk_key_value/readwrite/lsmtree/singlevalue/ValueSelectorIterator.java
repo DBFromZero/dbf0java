@@ -1,4 +1,4 @@
-package dbf0.disk_key_value.readwrite.lsmtree;
+package dbf0.disk_key_value.readwrite.lsmtree.singlevalue;
 
 import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.annotations.VisibleForTesting;

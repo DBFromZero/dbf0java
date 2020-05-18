@@ -7,7 +7,6 @@ import dbf0.disk_key_value.io.ReadOnlyFileOperations;
 import dbf0.disk_key_value.readonly.base.BaseRandomAccessKeyValueFileReader;
 
 import javax.annotation.Nullable;
-import java.io.Closeable;
 import java.io.IOException;
 import java.util.Comparator;
 import java.util.TreeMap;
@@ -68,26 +67,26 @@ public class RandomAccessKeyMultiValueFileReader<K, V> extends
     }
   }
 
-  public static class Result<V> implements Closeable {
+  public static class Result<V> implements MultiValueResult<V> {
     private final KeyMultiValueFileReader<?, V> reader;
 
     private Result(KeyMultiValueFileReader<?, V> reader) {
       this.reader = reader;
     }
 
-    public int count() {
+    @Override public int count() {
       return reader.getValuesCount();
     }
 
-    public int remaining() {
+    @Override public int remaining() {
       return reader.getValuesRemaining();
     }
 
-    public V readValue() throws IOException {
+    @Override public V readValue() throws IOException {
       return reader.readValue();
     }
 
-    public IOIterator<V> valueIterator() {
+    @Override public IOIterator<V> valueIterator() {
       return reader.valueIterator();
     }
 
