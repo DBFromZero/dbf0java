@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class WriteJobCoordinator<T extends OutputStream, W> {
+public class WriteJobCoordinator<T extends OutputStream, W, P extends PendingWrites<W>> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(WriteJobCoordinator.class);
 
@@ -29,7 +29,7 @@ public class WriteJobCoordinator<T extends OutputStream, W> {
   private final ScheduledExecutorService executor;
   @Nullable private final WriteAheadLog<?> writeAheadLog;
   private final WriteJob.SortAndWriter<T, W> writer;
-  private final FixedSizeBackgroundJobCoordinator<WriteJob<T, W>> backgroundJobCoordinator;
+  private final FixedSizeBackgroundJobCoordinator<WriteJob<T, W, P>> backgroundJobCoordinator;
 
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
   private int writersCreated = 0;
@@ -60,7 +60,7 @@ public class WriteJobCoordinator<T extends OutputStream, W> {
     return backgroundJobCoordinator.hasInFlightJobs();
   }
 
-  public void addWrites(PendingWritesAndLog<W> writes) {
+  public void addWrites(P writes) {
     Preconditions.checkState(!hasMaxInFlightWriters());
     Preconditions.checkState(isUsable());
     synchronized (this) {
@@ -87,20 +87,19 @@ public class WriteJobCoordinator<T extends OutputStream, W> {
     backgroundJobCoordinator.awaitNextJobCompletion();
   }
 
-  public List<WriteJob<T, W>> getCurrentInFlightJobs() {
+  public List<WriteJob<T, W, P>> getCurrentInFlightJobs() {
     return backgroundJobCoordinator.getCurrentInFlightJobs();
   }
 
-  private void createWriteJob(boolean isBase, int delta,
-                              PendingWritesAndLog<W> writesAndLog,
+  private void createWriteJob(boolean isBase, int delta, P writes,
                               FileOperations<T> fileOperations,
                               FileOperations<T> indexFileOperations) {
-    var job = new WriteJob<>("write" + writersCreated++, isBase, delta, writesAndLog,
+    var job = new WriteJob<>("write" + writersCreated++, isBase, delta, writes,
         fileOperations, indexFileOperations, this, writer);
     backgroundJobCoordinator.execute(job);
   }
 
-  void commitWrites(WriteJob<T, W> writer) {
+  void commitWrites(WriteJob<T, W, P> writer) {
     if (anyWriteAborted) {
       LOGGER.warning("Not committing " + writer.getName() + " since an earlier writer aborted");
       abortWrites(writer);
@@ -118,7 +117,7 @@ public class WriteJobCoordinator<T extends OutputStream, W> {
     }
   }
 
-  private void commitWritesWithLogging(WriteJob<T, W> writer) {
+  private void commitWritesWithLogging(WriteJob<T, W, P> writer) {
     try {
       if (state == State.WRITING_BASE) {
         Preconditions.checkState(writer.isBase());
@@ -128,18 +127,14 @@ public class WriteJobCoordinator<T extends OutputStream, W> {
         Preconditions.checkState(state == State.WRITE_DELTAS);
         baseDeltaFiles.addDelta(writer.getDelta());
       }
-      var logWriter = writer.getPendingWritesAndLog().getLogWriter();
-      if (logWriter != null) {
-        Preconditions.checkState(writeAheadLog != null);
-        writeAheadLog.freeWriter(logWriter.getName());
-      }
+      writer.getPendingWrites().freeWriteAheadLog();
     } catch (Exception e) {
       LOGGER.log(Level.SEVERE, e, () -> "error in committing writes. aborting");
       abortWrites(writer);
     }
   }
 
-  private void reattemptCommitWrites(WriteJob<T, W> writer, int count) {
+  private void reattemptCommitWrites(WriteJob<T, W, P> writer, int count) {
     LOGGER.info(() -> "Reattempting " + writer.getName() + " count=" + count);
     Preconditions.checkState(!writer.isBase());
     if (state == State.WRITING_BASE) {
@@ -161,7 +156,7 @@ public class WriteJobCoordinator<T extends OutputStream, W> {
     }
   }
 
-  void abortWrites(WriteJob<T, W> writer) {
+  void abortWrites(WriteJob<T, W, P> writer) {
     anyWriteAborted = true;
     LOGGER.warning("Aborting " + writer.getName());
   }

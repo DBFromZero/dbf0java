@@ -9,7 +9,7 @@ import java.io.OutputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class WriteJob<T extends OutputStream, W> implements Runnable {
+public class WriteJob<T extends OutputStream, W, P extends PendingWrites<W>> implements Runnable {
 
   public interface SortAndWriter<T extends OutputStream, W> {
     void sortAndWrite(T dataStream, T indexStream, W writes) throws IOException;
@@ -20,22 +20,22 @@ public class WriteJob<T extends OutputStream, W> implements Runnable {
   private final String name;
   private final boolean isBase;
   private final int delta;
-  private final PendingWritesAndLog<W> pendingWritesAndLog;
+  private final P pendingWrites;
   private final FileOperations<T> fileOperations;
   private final FileOperations<T> indexFileOperations;
-  private final WriteJobCoordinator<T, W> coordinator;
+  private final WriteJobCoordinator<T, W, P> coordinator;
   private final SortAndWriter<T, W> writer;
 
   public WriteJob(String name, boolean isBase, int delta,
-                  PendingWritesAndLog<W> pendingWritesAndLog,
+                  P pendingWrites,
                   FileOperations<T> fileOperations,
                   FileOperations<T> indexFileOperations,
-                  WriteJobCoordinator<T, W> coordinator,
+                  WriteJobCoordinator<T, W, P> coordinator,
                   SortAndWriter<T, W> writer) {
     this.name = name;
     this.isBase = isBase;
     this.delta = delta;
-    this.pendingWritesAndLog = pendingWritesAndLog;
+    this.pendingWrites = pendingWrites;
     this.fileOperations = fileOperations;
     this.indexFileOperations = indexFileOperations;
     this.coordinator = coordinator;
@@ -55,8 +55,8 @@ public class WriteJob<T extends OutputStream, W> implements Runnable {
     return delta;
   }
 
-  public PendingWritesAndLog<W> getPendingWritesAndLog() {
-    return pendingWritesAndLog;
+  public P getPendingWrites() {
+    return pendingWrites;
   }
 
   @Override public void run() {
@@ -69,7 +69,7 @@ public class WriteJob<T extends OutputStream, W> implements Runnable {
       indexOverWriter = indexFileOperations.createOverWriter();
 
       writer.sortAndWrite(overWriter.getOutputStream(), indexOverWriter.getOutputStream(),
-          pendingWritesAndLog.getWrites());
+          pendingWrites.getWrites());
 
       overWriter.commit();
       indexOverWriter.commit();
