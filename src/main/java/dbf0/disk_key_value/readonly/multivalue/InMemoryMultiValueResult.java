@@ -1,5 +1,6 @@
 package dbf0.disk_key_value.readonly.multivalue;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import dbf0.common.io.IOIterator;
 import org.jetbrains.annotations.NotNull;
@@ -55,14 +56,23 @@ public class InMemoryMultiValueResult<V> implements MultiValueResult<V> {
       this.iterator = iterator;
     }
 
-    @Override public boolean hasNext() throws IOException {
+    @Override public boolean hasNext() {
+      Preconditions.checkState(values != null, "already closed");
       return remaining > 0;
     }
 
-    @Override public V next() throws IOException {
+    @Override public V next() {
+      Preconditions.checkState(values != null, "already closed");
       V value = iterator.next();
       remaining--;
       return value;
     }
+  }
+
+  @Override public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("values", values)
+        .add("remaining", remaining)
+        .toString();
   }
 }

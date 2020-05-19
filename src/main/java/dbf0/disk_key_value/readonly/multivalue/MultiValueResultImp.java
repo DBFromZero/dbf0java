@@ -23,6 +23,14 @@ public class MultiValueResultImp<V> implements MultiValueResult<V> {
     return reader.readValue();
   }
 
+  @Override public void skipValue() throws IOException {
+    reader.skipValue();
+  }
+
+  @Override public void skipRemainingValues() throws IOException {
+    reader.skipRemainingValues();
+  }
+
   @Override public IOIterator<V> valueIterator() {
     return reader.valueIterator();
   }

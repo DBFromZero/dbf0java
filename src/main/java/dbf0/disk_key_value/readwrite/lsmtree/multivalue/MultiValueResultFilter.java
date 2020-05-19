@@ -38,7 +38,7 @@ public class MultiValueResultFilter<V> implements MultiValueResult<V> {
   }
 
   @Override public V readValue() throws IOException {
-    return filteringIterator.next();
+    return valueIterator().next();
   }
 
   @Override public IOIterator<V> valueIterator() {

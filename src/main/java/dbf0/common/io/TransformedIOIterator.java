@@ -19,4 +19,8 @@ public class TransformedIOIterator<T, R> implements IOIterator<R> {
   @Override public R next() throws IOException {
     return function.apply(iterator.next());
   }
+
+  @Override public void close() throws IOException {
+    iterator.close();
+  }
 }

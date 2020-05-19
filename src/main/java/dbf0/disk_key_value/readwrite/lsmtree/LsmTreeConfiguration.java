@@ -75,6 +75,20 @@ public class LsmTreeConfiguration<K, V> {
     return maxDeltaReadPercentage;
   }
 
+  public Builder<K, V> toBuilder() {
+    var b = new Builder<K, V>();
+    b.pendingWritesDeltaThreshold = pendingWritesDeltaThreshold;
+    b.keySerialization = keySerialization;
+    b.valueSerialization = valueSerialization;
+    b.keyComparator = keyComparator;
+    b.deleteValue = deleteValue;
+    b.mergeCronFrequency = mergeCronFrequency;
+    b.indexRate = indexRate;
+    b.maxInFlightWriteJobs = maxInFlightWriteJobs;
+    b.maxDeltaReadPercentage = maxDeltaReadPercentage;
+    return b;
+  }
+
   public static class Builder<K, V> {
     private int pendingWritesDeltaThreshold = 10 * 1000;
     private SerializationPair<K> keySerialization;

@@ -1,6 +1,5 @@
 package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 
-import com.google.common.collect.TreeMultimap;
 import dbf0.common.Dbf0Util;
 import dbf0.common.io.PositionTrackingStream;
 import dbf0.common.io.UnsignedLongSerializer;
@@ -13,22 +12,36 @@ import dbf0.disk_key_value.readwrite.lsmtree.base.WriteJob;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
-public class SortAndWriteKeyMultiValues<T extends OutputStream, K, V> implements WriteJob.SortAndWriter<T, TreeMultimap<K, ValueWrapper<V>>> {
+public class SortAndWriteKeyMultiValues<T extends OutputStream, K, V> implements WriteJob.SortAndWriter<T, PutAndDeletes<K, V>> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(SortAndWriteKeyMultiValues.class);
   private static final int IO_BUFFER_SIZE = 0x4000;
 
   private final LsmTreeConfiguration<K, ValueWrapper<V>> configuration;
+  private final Comparator<V> valueComparator;
 
-  public SortAndWriteKeyMultiValues(LsmTreeConfiguration<K, ValueWrapper<V>> configuration) {
+  public SortAndWriteKeyMultiValues(LsmTreeConfiguration<K, ValueWrapper<V>> configuration,
+                                    Comparator<V> valueComparator) {
     this.configuration = configuration;
+    this.valueComparator = valueComparator;
   }
 
   @Override
-  public void sortAndWrite(T dataStream, T indexStream, TreeMultimap<K, ValueWrapper<V>> writes) throws IOException {
+  public void sortAndWrite(T dataStream, T indexStream, PutAndDeletes<K, V> writes) throws IOException {
     LOGGER.info(() -> "Sorting " + writes.size() + " writes");
+    var entries = writes.getCombined().asMap().entrySet().stream()
+        .sorted(Map.Entry.comparingByKey(configuration.getKeyComparator()))
+        .collect(Collectors.toList());
+
+    long keyCount = 0, valueCount = 0;
+    var wrapperComparator = ValueWrapper.comparator(valueComparator);
     try (var outputStream = new PositionTrackingStream(dataStream, IO_BUFFER_SIZE)) {
       var keySerializer = configuration.getKeySerialization().getSerializer();
       try (var indexWriter = new KeyValueFileWriter<>(keySerializer, UnsignedLongSerializer.getInstance(),
@@ -36,13 +49,18 @@ public class SortAndWriteKeyMultiValues<T extends OutputStream, K, V> implements
         var indexBuilder = IndexBuilder.indexBuilder(indexWriter, configuration.getIndexRate());
         try (var writer = new KeyMultiValueFileWriter<>(keySerializer,
             configuration.getValueSerialization().getSerializer(), outputStream)) {
-          for (var keySet : writes.asMap().entrySet()) {
+          for (var keySet : entries) {
             var key = keySet.getKey();
             indexBuilder.accept(outputStream.getPosition(), key);
-            writer.writeKeysAndValues(key, keySet.getValue());
+            List<ValueWrapper<V>> values = new ArrayList<>(keySet.getValue());
+            values.sort(wrapperComparator);
+            writer.writeKeysAndValues(key, values);
+            keyCount++;
+            valueCount += values.size();
           }
         }
       }
     }
+    LOGGER.fine("Wrote " + keyCount + " keys and " + valueCount + " values");
   }
 }

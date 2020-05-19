@@ -2,17 +2,22 @@ package dbf0.common.io;
 
 import com.google.common.base.Preconditions;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.Iterator;
 
-public interface IOIterator<E> {
+public interface IOIterator<E> extends Closeable {
 
   boolean hasNext() throws IOException;
 
   E next() throws IOException;
 
-  default void remove() throws IOException {
-    throw new UnsupportedOperationException("remove");
+  default void skip() throws IOException {
+    next();
+  }
+
+  @Override default void close() throws IOException {
+
   }
 
   default void forEachRemaining(IOConsumer<? super E> action) throws IOException {

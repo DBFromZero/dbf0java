@@ -23,11 +23,13 @@ public class KeyMultiValueFileIterator<K, V> implements IOIterator<Pair<K, Multi
 
   @Override public boolean hasNext() throws IOException {
     if (!hasNext) {
+      reader.skipRemainingValues();
       var key = reader.readKey();
       if (key == null) {
         return false;
       }
       pair.setLeft(key);
+      hasNext = true;
     }
     return true;
   }
@@ -38,5 +40,17 @@ public class KeyMultiValueFileIterator<K, V> implements IOIterator<Pair<K, Multi
     }
     hasNext = false;
     return pair;
+  }
+
+  @Override public void skip() throws IOException {
+    if (!hasNext && !hasNext()) {
+      throw new RuntimeException("no next");
+    }
+    hasNext = false;
+    reader.skipRemainingValues();
+  }
+
+  @Override public void close() throws IOException {
+    reader.close();
   }
 }

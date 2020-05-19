@@ -56,14 +56,19 @@ public class RandomAccessKeyMultiValueFileReader<K, V> extends
     }
   }
 
-  @Nullable public MultiValueResultImp<V> get(K key) throws IOException {
-    try (var reader = readerSupplier.get()) {
+  @Nullable public MultiValueResult<V> get(K key) throws IOException {
+    MultiValueResult<V> result = null;
+    var reader = readerSupplier.get();
+    try {
       reader.skipBytes(computeSearchStartIndex(key));
       if (scanForKey(key, reader)) {
-        return new MultiValueResultImp<>(reader);
+        result = new MultiValueResultImp<>(reader);
       }
-      return null;
+    } finally {
+      if (result == null) {
+        reader.close();
+      }
     }
+    return result;
   }
-
 }

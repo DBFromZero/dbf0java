@@ -7,11 +7,15 @@ import java.util.Iterator;
 
 public class ChainedIOIterator<E> implements IOIterator<E> {
 
-  private final Iterator<IOIterator<E>> iterators;
+  private final IOIterator<IOIterator<E>> iterators;
   private IOIterator<E> current;
 
-  public ChainedIOIterator(Iterator<IOIterator<E>> iterators) {
+  public ChainedIOIterator(IOIterator<IOIterator<E>> iterators) {
     this.iterators = Preconditions.checkNotNull(iterators);
+  }
+
+  public ChainedIOIterator(Iterator<IOIterator<E>> iterators) {
+    this(IOIterator.of(iterators));
   }
 
   public ChainedIOIterator(Iterable<IOIterator<E>> iterators) {
@@ -21,7 +25,7 @@ public class ChainedIOIterator<E> implements IOIterator<E> {
   @Override public boolean hasNext() throws IOException {
     if (current == null || !current.hasNext()) {
       while (iterators.hasNext()) {
-        current = iterators.next();
+        current = Preconditions.checkNotNull(iterators.next());
         if (current.hasNext()) {
           return true;
         }

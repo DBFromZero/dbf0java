@@ -1,16 +1,14 @@
 package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.TreeMultimap;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.disk_key_value.io.FileDirectoryOperations;
-import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
-import dbf0.disk_key_value.io.MemoryFileOperations;
 import dbf0.disk_key_value.readonly.multivalue.InMemoryMultiValueResult;
 import dbf0.disk_key_value.readonly.multivalue.MultiValueResult;
 import dbf0.disk_key_value.readonly.multivalue.RandomAccessKeyMultiValueFileReader;
 import dbf0.disk_key_value.readwrite.MultiValueReadWriteStorage;
+import dbf0.disk_key_value.readwrite.MultiValueReadWriteStorageWithBackgroundTasks;
 import dbf0.disk_key_value.readwrite.lsmtree.LsmTreeConfiguration;
 import dbf0.disk_key_value.readwrite.lsmtree.base.*;
 import dbf0.document.types.DElement;
@@ -29,7 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
 public class MultiValueLsmTree<T extends OutputStream, K, V>
-    extends BaseLsmTree<T, K, ValueWrapper<V>, TreeMultimap<K, ValueWrapper<V>>, MultiValuePendingWrites<K, V>,
+    extends BaseLsmTree<T, K, ValueWrapper<V>, PutAndDeletes<K, V>, MultiValuePendingWrites<K, V>,
     RandomAccessKeyMultiValueFileReader<K, ValueWrapper<V>>>
     implements MultiValueReadWriteStorage<K, V> {
 
@@ -64,6 +62,11 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
       return buildInternal().getLeft();
     }
 
+    public MultiValueReadWriteStorageWithBackgroundTasks<K, V> buildWithBackgroundTasks() {
+      var pair = buildInternal();
+      return new MultiValueReadWriteStorageWithBackgroundTasks<>(pair.getLeft(), pair.getRight());
+    }
+
     private Pair<MultiValueLsmTree<T, K, V>, ExecutorService> buildInternal() {
       Preconditions.checkState(baseDeltaFiles != null, "must specify baseDeltaFiles");
       Preconditions.checkState(valueComparator != null, "must specify valueComparator");
@@ -71,9 +74,9 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
       if (executorService == null) {
         executorService = Executors.newScheduledThreadPool(4);
       }
-      var coordinator = new WriteJobCoordinator<T, TreeMultimap<K, ValueWrapper<V>>, MultiValuePendingWrites<K, V>>(
+      var coordinator = new WriteJobCoordinator<T, PutAndDeletes<K, V>, MultiValuePendingWrites<K, V>>(
           baseDeltaFiles, executorService, null,
-          new SortAndWriteKeyMultiValues<>(configuration), configuration.getMaxInFlightWriteJobs());
+          new SortAndWriteKeyMultiValues<>(configuration, valueComparator), configuration.getMaxInFlightWriteJobs());
       var mergerCron = new BaseDeltaMergerCron<>(baseDeltaFiles, executorService, configuration.getMergeCronFrequency(),
           configuration.getMaxDeltaReadPercentage(), new MultiValueLsmTreeMerger<>(configuration, valueComparator));
       return Pair.of(new MultiValueLsmTree<>(configuration, valueComparator, baseDeltaFiles, coordinator, mergerCron),
@@ -87,7 +90,14 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
 
   public static <T extends OutputStream> Builder<T, ByteArrayWrapper, ByteArrayWrapper>
   builderForBytes(LsmTreeConfiguration<ByteArrayWrapper, ValueWrapper<ByteArrayWrapper>> configuration) {
-    return builder(configuration);
+    Builder<T, ByteArrayWrapper, ByteArrayWrapper> b = builder(configuration);
+    return b.withValueComparator(ByteArrayWrapper::compareTo);
+  }
+
+  public static <T extends OutputStream> Builder<T, ByteArrayWrapper, ByteArrayWrapper>
+  builderForBytes(LsmTreeConfiguration<ByteArrayWrapper, ValueWrapper<ByteArrayWrapper>> configuration,
+                  FileDirectoryOperations<T> operations) {
+    return MultiValueLsmTree.<T>builderForBytes(configuration).withBaseDeltaFiles(operations);
   }
 
   public static <T extends OutputStream> Builder<T, DElement, DElement>
@@ -96,9 +106,7 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
   }
 
   public static <T extends OutputStream> Builder<T, ByteArrayWrapper, ByteArrayWrapper> builderForBytes() {
-    Builder<T, ByteArrayWrapper, ByteArrayWrapper> b = builderForBytes(
-        LsmTreeConfiguration.builderForMultiValueBytes().build());
-    return b.withValueComparator(ByteArrayWrapper::compareTo);
+    return builderForBytes(LsmTreeConfiguration.builderForMultiValueBytes().build());
   }
 
   public static <T extends OutputStream> Builder<T, DElement, DElement> builderForDocuments() {
@@ -107,18 +115,12 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
     return b.withValueComparator(DElement::compareTo);
   }
 
-  public static <K, V> Builder<MemoryFileOperations.MemoryOutputStream, K, V> builderForTesting(
-      MemoryFileDirectoryOperations directoryOperations, LsmTreeConfiguration<K, ValueWrapper<V>> configuration) {
-    return MultiValueLsmTree.<MemoryFileOperations.MemoryOutputStream, K, V>builder(configuration)
-        .withBaseDeltaFiles(directoryOperations);
-  }
-
   private final Comparator<V> valueComparator;
 
   private MultiValueLsmTree(LsmTreeConfiguration<K, ValueWrapper<V>> configuration, Comparator<V> valueComparator,
                             BaseDeltaFiles<T, K, ValueWrapper<V>,
                                 RandomAccessKeyMultiValueFileReader<K, ValueWrapper<V>>> baseDeltaFiles,
-                            WriteJobCoordinator<T, TreeMultimap<K, ValueWrapper<V>>,
+                            WriteJobCoordinator<T, PutAndDeletes<K, V>,
                                 MultiValuePendingWrites<K, V>> coordinator,
                             BaseDeltaMergerCron<T> mergerCron) {
     super(configuration, baseDeltaFiles, coordinator, mergerCron);
@@ -141,7 +143,11 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
     Preconditions.checkState(isUsable());
     var writesBlocked = lock.callWithWriteLock(() -> {
       Preconditions.checkState(pendingWrites != null, "is closed");
-      pendingWrites.getWrites().put(key, new ValueWrapper<>(isDelete, value));
+      if (isDelete) {
+        pendingWrites.getWrites().delete(key, value);
+      } else {
+        pendingWrites.getWrites().put(key, value);
+      }
       return checkMergeThreshold();
     });
     if (writesBlocked) {
@@ -155,14 +161,14 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
     var orderedResults = new ArrayList<MultiValueResult<ValueWrapper<V>>>(8);
     lock.runWithReadLock(() -> {
       Preconditions.checkState(pendingWrites != null, "is closed");
-      var pendingVs = pendingWrites.getWrites().get(key);
+      var pendingVs = pendingWrites.getWrites().getValues(key);
       if (!pendingVs.isEmpty()) {
-        orderedResults.add(new InMemoryMultiValueResult<>(new ArrayList<>(pendingVs)));
+        orderedResults.add(new InMemoryMultiValueResult<>(pendingVs));
       }
     });
     var jobs = coordinator.getCurrentInFlightJobs();
     for (int i = jobs.size() - 1; i >= 0; i--) {
-      var inProgressVs = jobs.get(i).getPendingWrites().getWrites().get(key);
+      var inProgressVs = jobs.get(i).getPendingWrites().getWrites().getValues(key);
       if (!inProgressVs.isEmpty()) {
         orderedResults.add(new InMemoryMultiValueResult<>(inProgressVs));
       }
@@ -170,12 +176,12 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
     if (baseDeltaFiles.hasInUseBase()) {
       addValuesFromStores(key, orderedResults);
     }
+    LOGGER.fine(orderedResults::toString);
     return MultiValueResultFilter.create(orderedResults);
   }
 
   @Override protected MultiValuePendingWrites<K, V> createNewPendingWrites() {
-    return new MultiValuePendingWrites<>(
-        TreeMultimap.create(configuration.getKeyComparator(), ValueWrapper.comparator(valueComparator)));
+    return new MultiValuePendingWrites<>(new PutAndDeletes<>(configuration.getPendingWritesDeltaThreshold()));
   }
 
   @Override protected void sendWritesToCoordinator() {

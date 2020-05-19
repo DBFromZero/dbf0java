@@ -40,6 +40,17 @@ public class CombinedMultiValueResult<V> implements MultiValueResult<V> {
     return valueIterator().next();
   }
 
+  @Override public void skipValue() throws IOException {
+    valueIterator().skip();
+  }
+
+  @Override public void skipRemainingValues() throws IOException {
+    Preconditions.checkState(components != null, "already closed");
+    for (MultiValueResult<V> component : components) {
+      component.skipRemainingValues();
+    }
+  }
+
   @Override public IOIterator<V> valueIterator() {
     if (iterator == null) {
       Preconditions.checkState(components != null, "already closed");
@@ -53,7 +64,6 @@ public class CombinedMultiValueResult<V> implements MultiValueResult<V> {
       for (MultiValueResult<V> component : components) {
         component.close();
       }
-      components.clear();
       components = null;
       iterator = null;
     }

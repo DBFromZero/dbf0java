@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.NoSuchElementException;
 
 public class KeyMultiValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> {
 
@@ -71,14 +72,13 @@ public class KeyMultiValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> 
 
   public void skipRemainingValues() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
-    while (valuesRemaining-- > 0) {
+    for (; valuesRemaining > 0; valuesRemaining--) {
       valueDeserializer.skipDeserialize(inputStream);
     }
   }
 
   public IOIterator<V> valueIterator() {
     Preconditions.checkState(inputStream != null, "already closed");
-    Preconditions.checkState(valuesRemaining > 0);
     if (valueIterator == null) {
       valueIterator = new IOIterator<V>() {
         @Override public boolean hasNext() {
@@ -86,10 +86,23 @@ public class KeyMultiValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> 
         }
 
         @Override public V next() throws IOException {
+          if (valuesRemaining == 0) {
+            throw new NoSuchElementException();
+          }
           return readValue();
+        }
+
+        @Override public void skip() throws IOException {
+          skipValue();
         }
       };
     }
     return valueIterator;
+  }
+
+  @Override public void close() throws IOException {
+    super.close();
+    valuesCount = valuesRemaining = 0;
+    valueIterator = null;
   }
 }

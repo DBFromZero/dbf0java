@@ -1,5 +1,6 @@
 package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 
+import com.google.common.base.MoreObjects;
 import dbf0.common.io.Deserializer;
 import dbf0.common.io.EndOfStream;
 import dbf0.common.io.SerializationPair;
@@ -27,20 +28,27 @@ public final class ValueWrapper<V> {
     return value;
   }
 
-  /*
-    Specifically only include value in equals and hashCode so that a newer isDelete attribute can overwrite an older one
-   */
   @Override public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
 
     ValueWrapper<?> that = (ValueWrapper<?>) o;
 
-    return value != null ? value.equals(that.value) : that.value == null;
+    if (isDelete != that.isDelete) return false;
+    return value.equals(that.value);
   }
 
   @Override public int hashCode() {
-    return value != null ? value.hashCode() : 0;
+    int result = (isDelete ? 1 : 0);
+    result = 31 * result + value.hashCode();
+    return result;
+  }
+
+  @Override public String toString() {
+    return MoreObjects.toStringHelper("W")
+        .add("isDelete", isDelete)
+        .add("value", value)
+        .toString();
   }
 
   static <V> Comparator<ValueWrapper<V>> comparator(Comparator<V> comparator) {

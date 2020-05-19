@@ -1,4 +1,4 @@
-package dbf0.disk_key_value.readwrite.lsmtree;
+package dbf0.disk_key_value.readwrite.lsmtree.singelvalue;
 
 import com.google.common.collect.Streams;
 import dbf0.common.ByteArrayWrapper;
@@ -12,6 +12,7 @@ import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageWithBackgroundTasks;
 import dbf0.disk_key_value.readwrite.log.ImmediateLogSynchronizer;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
+import dbf0.disk_key_value.readwrite.lsmtree.LsmTreeConfiguration;
 import dbf0.disk_key_value.readwrite.lsmtree.singlevalue.LsmTree;
 import dbf0.document.types.DString;
 import dbf0.test.KnownKeyRate;

@@ -1,19 +1,18 @@
 package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.TreeMultimap;
 import dbf0.disk_key_value.readwrite.lsmtree.base.PendingWrites;
 import org.jetbrains.annotations.NotNull;
 
-public class MultiValuePendingWrites<K, V> implements PendingWrites<TreeMultimap<K, ValueWrapper<V>>> {
+public class MultiValuePendingWrites<K, V> implements PendingWrites<PutAndDeletes<K, V>> {
 
-  private final TreeMultimap<K, ValueWrapper<V>> writes;
+  private final PutAndDeletes<K, V> writes;
 
-  public MultiValuePendingWrites(@NotNull TreeMultimap<K, ValueWrapper<V>> writes) {
+  public MultiValuePendingWrites(@NotNull PutAndDeletes<K, V> writes) {
     this.writes = Preconditions.checkNotNull(writes);
   }
 
-  @Override @NotNull public TreeMultimap<K, ValueWrapper<V>> getWrites() {
+  @Override @NotNull public PutAndDeletes<K, V> getWrites() {
     return writes;
   }
 

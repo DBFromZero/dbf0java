@@ -3,45 +3,47 @@ package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterators;
-import com.google.common.collect.PeekingIterator;
 import dbf0.common.io.IOIterator;
+import dbf0.common.io.MergingIOIterator;
+import dbf0.common.io.PeekingIOIterator;
 import dbf0.disk_key_value.readonly.multivalue.KeyMultiValueFileIterator;
 import dbf0.disk_key_value.readonly.multivalue.KeyMultiValueFileReader;
 import dbf0.disk_key_value.readonly.multivalue.MultiValueResult;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@VisibleForTesting class MultiValueSelectorIterator<K, V> implements Iterator<Pair<K, List<ValueWrapper<V>>>> {
+@VisibleForTesting class MultiValueSelectorIterator<K, V> implements IOIterator<Pair<K, List<ValueWrapper<V>>>> {
 
-  private final PeekingIterator<KeyMultiValueRank<K, V>> sortedIterator;
+  private final PeekingIOIterator<KeyMultiValueRank<K, V>> sortedIterator;
   private final Comparator<V> valueComparator;
 
   private final List<Iterator<ValueRank<V>>> valueIterators = new ArrayList<>(8);
   private final List<ValueWrapper<V>> sortedValues = new ArrayList<>(128);
   private final MutablePair<K, List<ValueWrapper<V>>> pair = MutablePair.of(null, sortedValues);
 
-  MultiValueSelectorIterator(Iterator<KeyMultiValueRank<K, V>> sortedIterator,
+  MultiValueSelectorIterator(IOIterator<KeyMultiValueRank<K, V>> sortedIterator,
                              Comparator<V> valueComparator) {
-    this.sortedIterator = Iterators.peekingIterator(sortedIterator);
+    this.sortedIterator = new PeekingIOIterator<>(sortedIterator);
     this.valueComparator = valueComparator;
   }
 
-  @Override public boolean hasNext() {
+  @Override public boolean hasNext() throws IOException {
     return sortedIterator.hasNext();
   }
 
-  @Override public Pair<K, List<ValueWrapper<V>>> next() {
+  @Override public Pair<K, List<ValueWrapper<V>>> next() throws IOException {
     var first = sortedIterator.next();
     var key = first.key;
     pair.setLeft(key);
 
-    valueIterators.clear();
+    valueIterators.add(first.valuesIterator());
     while (sortedIterator.hasNext() && sortedIterator.peek().key.equals(key)) {
       valueIterators.add(sortedIterator.next().valuesIterator());
     }
@@ -65,22 +67,29 @@ import java.util.stream.Collectors;
         sortedValues.add(highestValue);
       }
     }
+    valueIterators.clear();
+
     return pair;
   }
 
-  @VisibleForTesting
   static <K, V> MultiValueSelectorIterator<K, V> createSortedAndSelectedIterator(
       List<KeyMultiValueFileReader<K, ValueWrapper<V>>> orderedReaders,
       Comparator<K> keyComparator, Comparator<V> valueComparator) {
+    return new MultiValueSelectorIterator<>(createSortedIterator(orderedReaders, keyComparator), valueComparator);
+  }
+
+  @VisibleForTesting
+  static <K, V> MergingIOIterator<KeyMultiValueRank<K, V>>
+  createSortedIterator(List<KeyMultiValueFileReader<K, ValueWrapper<V>>> orderedReaders, Comparator<K> keyComparator) {
     var rankedIterators = StreamUtils.zipWithIndex(orderedReaders.stream().map(KeyMultiValueFileIterator::new))
         .map(indexedIterator -> addRank(indexedIterator.getValue(), (int) indexedIterator.getIndex()))
         .collect(Collectors.toList());
-    var mergeSortedIterator = Iterators.mergeSorted(rankedIterators, Comparator.comparing(KeyMultiValueRank::getKey, keyComparator));
-    return new MultiValueSelectorIterator<>(mergeSortedIterator, valueComparator);
+    return new MergingIOIterator<>(rankedIterators, Comparator.comparing(KeyMultiValueRank::getKey, keyComparator));
   }
 
-  static <K, V> Iterator<KeyMultiValueRank<K, V>> addRank(IOIterator<Pair<K, MultiValueResult<ValueWrapper<V>>>> iterator, int rank) {
-    return iterator.transform(pair -> new KeyMultiValueRank<>(pair.getKey(), pair.getValue(), rank)).unchcecked();
+  static <K, V> IOIterator<KeyMultiValueRank<K, V>> addRank(
+      IOIterator<Pair<K, MultiValueResult<ValueWrapper<V>>>> iterator, int rank) {
+    return iterator.transform(pair -> new KeyMultiValueRank<>(pair.getKey(), pair.getValue(), rank));
   }
 
   @VisibleForTesting
@@ -97,6 +106,14 @@ import java.util.stream.Collectors;
 
     K getKey() {
       return key;
+    }
+
+    MultiValueResult<ValueWrapper<V>> getValues() {
+      return values;
+    }
+
+    int getRank() {
+      return rank;
     }
 
     Iterator<ValueRank<V>> valuesIterator() {

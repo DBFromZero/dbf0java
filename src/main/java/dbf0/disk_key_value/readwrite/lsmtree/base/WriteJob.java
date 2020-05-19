@@ -74,8 +74,8 @@ public class WriteJob<T extends OutputStream, W, P extends PendingWrites<W>> imp
       overWriter.commit();
       indexOverWriter.commit();
       coordinator.commitWrites(this);
-    } catch (Exception e) {
-      LOGGER.log(Level.SEVERE, e, () -> "error in writing sorted file for " + name);
+    } catch (Throwable t) {
+      LOGGER.log(Level.SEVERE, t, () -> "error in writing sorted file for " + name);
       if (overWriter != null) {
         overWriter.abort();
       }
