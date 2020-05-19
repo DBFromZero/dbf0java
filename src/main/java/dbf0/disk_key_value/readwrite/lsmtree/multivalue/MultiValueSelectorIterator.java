@@ -2,8 +2,8 @@ package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 
 import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Iterators;
 import dbf0.common.io.IOIterator;
+import dbf0.common.io.MergeSortGroupingIOIterator;
 import dbf0.common.io.MergingIOIterator;
 import dbf0.common.io.PeekingIOIterator;
 import dbf0.disk_key_value.readonly.multivalue.KeyMultiValueFileIterator;
@@ -15,22 +15,21 @@ import org.apache.commons.lang3.tuple.Pair;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @VisibleForTesting class MultiValueSelectorIterator<K, V> implements IOIterator<Pair<K, List<ValueWrapper<V>>>> {
 
-  private final PeekingIOIterator<KeyMultiValueRank<K, V>> sortedIterator;
+  private final IOIterator<List<KeyMultiValueRank<K, V>>> sortedIterator;
   private final Comparator<V> valueComparator;
 
-  private final List<Iterator<ValueRank<V>>> valueIterators = new ArrayList<>(8);
+  private final List<IOIterator<ValueRank<V>>> rankedValuesIterators = new ArrayList<>(8);
   private final List<ValueWrapper<V>> sortedValues = new ArrayList<>(128);
   private final MutablePair<K, List<ValueWrapper<V>>> pair = MutablePair.of(null, sortedValues);
 
-  MultiValueSelectorIterator(IOIterator<KeyMultiValueRank<K, V>> sortedIterator,
+  MultiValueSelectorIterator(IOIterator<List<KeyMultiValueRank<K, V>>> sortedIterator,
                              Comparator<V> valueComparator) {
-    this.sortedIterator = new PeekingIOIterator<>(sortedIterator);
+    this.sortedIterator = sortedIterator;
     this.valueComparator = valueComparator;
   }
 
@@ -39,18 +38,32 @@ import java.util.stream.Collectors;
   }
 
   @Override public Pair<K, List<ValueWrapper<V>>> next() throws IOException {
-    var first = sortedIterator.next();
-    var key = first.key;
-    pair.setLeft(key);
-
-    valueIterators.add(first.valuesIterator());
-    while (sortedIterator.hasNext() && sortedIterator.peek().key.equals(key)) {
-      valueIterators.add(sortedIterator.next().valuesIterator());
+    var keyEntries = sortedIterator.next();
+    pair.setLeft(keyEntries.get(0).key);
+    sortedValues.clear();
+    if (keyEntries.size() == 1) {
+      var iterator = keyEntries.get(0).values.valueIterator();
+      while (iterator.hasNext()) {
+        var value = iterator.next();
+        if (!value.isDelete()) {
+          sortedValues.add(value);
+        }
+      }
+    } else {
+      addSortedValuesByRank(keyEntries);
     }
-    var sortedValuesIterator = Iterators.peekingIterator(Iterators.mergeSorted(valueIterators,
+    keyEntries.clear();
+
+    return pair;
+  }
+
+  private void addSortedValuesByRank(List<KeyMultiValueRank<K, V>> keyEntries) throws IOException {
+    for (var keyEntry : keyEntries) {
+      rankedValuesIterators.add(keyEntry.rankedValuesIterator());
+    }
+    var sortedValuesIterator = new PeekingIOIterator<>(new MergingIOIterator<>(rankedValuesIterators,
         (a, b) -> valueComparator.compare(a.value.getValue(), b.value.getValue())));
 
-    sortedValues.clear();
     while (sortedValuesIterator.hasNext()) {
       var firstValue = sortedValuesIterator.next();
       var highestRank = firstValue.rank;
@@ -67,9 +80,7 @@ import java.util.stream.Collectors;
         sortedValues.add(highestValue);
       }
     }
-    valueIterators.clear();
-
-    return pair;
+    rankedValuesIterators.clear();
   }
 
   static <K, V> MultiValueSelectorIterator<K, V> createSortedAndSelectedIterator(
@@ -79,15 +90,15 @@ import java.util.stream.Collectors;
   }
 
   @VisibleForTesting
-  static <K, V> MergingIOIterator<KeyMultiValueRank<K, V>>
+  static <K, V> MergeSortGroupingIOIterator<KeyMultiValueRank<K, V>>
   createSortedIterator(List<KeyMultiValueFileReader<K, ValueWrapper<V>>> orderedReaders, Comparator<K> keyComparator) {
     var rankedIterators = StreamUtils.zipWithIndex(orderedReaders.stream().map(KeyMultiValueFileIterator::new))
         .map(indexedIterator -> addRank(indexedIterator.getValue(), (int) indexedIterator.getIndex()))
         .collect(Collectors.toList());
-    return new MergingIOIterator<>(rankedIterators, Comparator.comparing(KeyMultiValueRank::getKey, keyComparator));
+    return new MergeSortGroupingIOIterator<>(rankedIterators, Comparator.comparing(KeyMultiValueRank::getKey, keyComparator));
   }
 
-  static <K, V> IOIterator<KeyMultiValueRank<K, V>> addRank(
+  private static <K, V> IOIterator<KeyMultiValueRank<K, V>> addRank(
       IOIterator<Pair<K, MultiValueResult<ValueWrapper<V>>>> iterator, int rank) {
     return iterator.transform(pair -> new KeyMultiValueRank<>(pair.getKey(), pair.getValue(), rank));
   }
@@ -116,8 +127,8 @@ import java.util.stream.Collectors;
       return rank;
     }
 
-    Iterator<ValueRank<V>> valuesIterator() {
-      return values.valueIterator().transform(value -> new ValueRank<>(value, rank)).unchcecked();
+    IOIterator<ValueRank<V>> rankedValuesIterator() {
+      return values.valueIterator().transform(value -> new ValueRank<>(value, rank));
     }
   }
 

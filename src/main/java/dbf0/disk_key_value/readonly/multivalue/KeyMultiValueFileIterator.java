@@ -23,7 +23,6 @@ public class KeyMultiValueFileIterator<K, V> implements IOIterator<Pair<K, Multi
 
   @Override public boolean hasNext() throws IOException {
     if (!hasNext) {
-      reader.skipRemainingValues();
       var key = reader.readKey();
       if (key == null) {
         return false;

@@ -1,10 +1,7 @@
 package dbf0.common.io;
 
 import java.io.IOException;
-import java.util.Comparator;
-import java.util.NoSuchElementException;
-import java.util.PriorityQueue;
-import java.util.Queue;
+import java.util.*;
 
 
 /**
@@ -15,7 +12,9 @@ import java.util.Queue;
  * @param <T>
  */
 public class MergingIOIterator<T> implements IOIterator<T> {
-  final Queue<PeekingIOIterator<T>> queue;
+  private final Collection<IOIterator<? extends T>> allIterators;
+  private final Queue<PeekingIOIterator<T>> queue;
+  private PeekingIOIterator<T> lastTopIter = null;
 
   public MergingIOIterator(
       Iterable<? extends IOIterator<? extends T>> iterators,
@@ -28,13 +27,16 @@ public class MergingIOIterator<T> implements IOIterator<T> {
       }
     });
 
+    allIterators = new ArrayList<>();
     for (var iterator : iterators) {
+      allIterators.add(iterator);
       queue.add(new PeekingIOIterator<>(iterator));
     }
   }
 
   @Override
   public boolean hasNext() throws IOException {
+    addLastTopIter();
     for (var peekingIOIterator : queue) {
       if (peekingIOIterator.hasNext()) {
         return true;
@@ -45,14 +47,31 @@ public class MergingIOIterator<T> implements IOIterator<T> {
 
   @Override
   public T next() throws IOException {
+    addLastTopIter();
     while (!queue.isEmpty()) {
       var topIter = queue.remove();
       if (topIter.hasNext()) {
         T next = topIter.next();
-        queue.add(topIter);
+        lastTopIter = topIter;
         return next;
       }
     }
     throw new NoSuchElementException();
+  }
+
+  @Override public void close() throws IOException {
+    for (var iterator : allIterators) {
+      iterator.close();
+    }
+    allIterators.clear();
+    queue.clear();
+    lastTopIter = null;
+  }
+
+  private void addLastTopIter() {
+    if (lastTopIter != null) {
+      queue.add(lastTopIter);
+      lastTopIter = null;
+    }
   }
 }

@@ -35,7 +35,7 @@ public class KeyMultiValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> 
 
   @Nullable public K readKey() throws IOException {
     Preconditions.checkState(inputStream != null, "already closed");
-    Preconditions.checkState(valuesRemaining == 0);
+    Preconditions.checkState(valuesRemaining == 0, "there are still values remaining");
     K key;
     try {
       key = keyDeserializer.deserialize(inputStream);
@@ -94,6 +94,10 @@ public class KeyMultiValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> 
 
         @Override public void skip() throws IOException {
           skipValue();
+        }
+
+        @Override public void close() throws IOException {
+          KeyMultiValueFileReader.this.close();
         }
       };
     }

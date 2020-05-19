@@ -1,5 +1,6 @@
 package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 
@@ -7,8 +8,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+@VisibleForTesting
 class PutAndDeletes<K, V> {
-
 
   private final HashMultimap<K, V> puts;
   private final HashMultimap<K, V> deletes;
