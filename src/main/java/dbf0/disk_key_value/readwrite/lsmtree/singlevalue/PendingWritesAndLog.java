@@ -1,8 +1,9 @@
-package dbf0.disk_key_value.readwrite.lsmtree.base;
+package dbf0.disk_key_value.readwrite.lsmtree.singlevalue;
 
 import com.google.common.base.Preconditions;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLogWriter;
+import dbf0.disk_key_value.readwrite.lsmtree.base.PendingWrites;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;

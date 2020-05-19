@@ -25,6 +25,10 @@ public interface IOIterator<E> {
     return wrap(this);
   }
 
+  default <R> IOIterator<R> transform(IOFunction<E, R> function) {
+    return new TransformedIOIterator<>(this, function);
+  }
+
   static <E> Wrapper<E> wrap(IOIterator<E> x) {
     return new Wrapper<>(x);
   }

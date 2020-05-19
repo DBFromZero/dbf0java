@@ -1,7 +1,6 @@
 package dbf0.disk_key_value.readonly.multivalue;
 
 import dbf0.common.io.Deserializer;
-import dbf0.common.io.IOIterator;
 import dbf0.common.io.IOSupplier;
 import dbf0.disk_key_value.io.ReadOnlyFileOperations;
 import dbf0.disk_key_value.readonly.base.BaseRandomAccessKeyValueFileReader;
@@ -57,41 +56,14 @@ public class RandomAccessKeyMultiValueFileReader<K, V> extends
     }
   }
 
-  @Nullable public Result<V> get(K key) throws IOException {
+  @Nullable public MultiValueResultImp<V> get(K key) throws IOException {
     try (var reader = readerSupplier.get()) {
       reader.skipBytes(computeSearchStartIndex(key));
       if (scanForKey(key, reader)) {
-        return new Result<>(reader);
+        return new MultiValueResultImp<>(reader);
       }
       return null;
     }
   }
 
-  public static class Result<V> implements MultiValueResult<V> {
-    private final KeyMultiValueFileReader<?, V> reader;
-
-    private Result(KeyMultiValueFileReader<?, V> reader) {
-      this.reader = reader;
-    }
-
-    @Override public int count() {
-      return reader.getValuesCount();
-    }
-
-    @Override public int remaining() {
-      return reader.getValuesRemaining();
-    }
-
-    @Override public V readValue() throws IOException {
-      return reader.readValue();
-    }
-
-    @Override public IOIterator<V> valueIterator() {
-      return reader.valueIterator();
-    }
-
-    @Override public void close() throws IOException {
-      reader.close();
-    }
-  }
 }

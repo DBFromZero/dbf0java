@@ -36,10 +36,21 @@ public class LsmTree<T extends OutputStream, K, V>
 
   public static class Builder<T extends OutputStream, K, V> extends BaseLsmTreeBuilder<T, K, V, Builder<T, K, V>> {
 
+    protected BaseDeltaFiles<T, K, V, RandomAccessKeyValueFileReader<K, V>> baseDeltaFiles;
     protected WriteAheadLog<?> writeAheadLog;
 
     public Builder(final LsmTreeConfiguration<K, V> configuration) {
       super(configuration);
+    }
+
+    public Builder<T, K, V> withBaseDeltaFiles(FileDirectoryOperations<T> fileDirectoryOperations) {
+      this.baseDeltaFiles = new BaseDeltaFiles<>(fileDirectoryOperations,
+          (baseOperations, indexOperations) -> RandomAccessKeyValueFileReader.open(
+              configuration.getKeySerialization().getDeserializer(),
+              configuration.getValueSerialization().getDeserializer(),
+              configuration.getKeyComparator(),
+              baseOperations, indexOperations));
+      return this;
     }
 
     public Builder<T, K, V> withWriteAheadLog(WriteAheadLog<?> writeAheadLog) {

@@ -1,6 +1,6 @@
 package dbf0.disk_key_value.readwrite;
 
-import dbf0.disk_key_value.readonly.multivalue.RandomAccessKeyMultiValueFileReader;
+import dbf0.disk_key_value.readonly.multivalue.MultiValueResult;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
@@ -14,7 +14,7 @@ public interface MultiValueReadWriteStorage<K, V> extends Closeable {
 
   void put(@NotNull K key, @NotNull V value) throws IOException;
 
-  @Nullable RandomAccessKeyMultiValueFileReader.Result<V> get(@NotNull K key) throws IOException;
+  @Nullable MultiValueResult<V> get(@NotNull K key) throws IOException;
 
   void delete(@NotNull K key, @NotNull V value) throws IOException;
 

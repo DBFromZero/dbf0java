@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.io.ByteArraySerializer;
 import dbf0.common.io.SerializationPair;
+import dbf0.disk_key_value.readwrite.lsmtree.multivalue.ValueWrapper;
 import dbf0.document.types.DElement;
 import dbf0.document.types.DString;
 
@@ -30,7 +31,7 @@ public class LsmTreeConfiguration<K, V> {
     this.keySerialization = Preconditions.checkNotNull(builder.keySerialization);
     this.valueSerialization = Preconditions.checkNotNull(builder.valueSerialization);
     this.keyComparator = Preconditions.checkNotNull(builder.keyComparator);
-    this.deleteValue = Preconditions.checkNotNull(builder.deleteValue);
+    this.deleteValue = builder.deleteValue;
     this.mergeCronFrequency = Preconditions.checkNotNull(builder.mergeCronFrequency);
     this.pendingWritesDeltaThreshold = builder.pendingWritesDeltaThreshold;
     this.indexRate = builder.indexRate;
@@ -160,5 +161,19 @@ public class LsmTreeConfiguration<K, V> {
         .withValueSerialization(DElement.sizePrefixedSerializationPair())
         .withKeyComparator(DElement::compareTo)
         .withDeleteValue(D_ELEMENT_DELETE_VALUE);
+  }
+
+  public static Builder<ByteArrayWrapper, ValueWrapper<ByteArrayWrapper>> builderForMultiValueBytes() {
+    return LsmTreeConfiguration.<ByteArrayWrapper, ValueWrapper<ByteArrayWrapper>>builder()
+        .withKeySerialization(ByteArraySerializer.serializationPair())
+        .withValueSerialization(ValueWrapper.serializationPair(ByteArraySerializer.serializationPair()))
+        .withKeyComparator(ByteArrayWrapper::compareTo);
+  }
+
+  public static Builder<DElement, ValueWrapper<DElement>> builderForMultiValueDocuments() {
+    return LsmTreeConfiguration.<DElement, ValueWrapper<DElement>>builder()
+        .withKeySerialization(DElement.serializationPair())
+        .withValueSerialization(ValueWrapper.serializationPair(DElement.serializationPair()))
+        .withKeyComparator(DElement::compareTo);
   }
 }
