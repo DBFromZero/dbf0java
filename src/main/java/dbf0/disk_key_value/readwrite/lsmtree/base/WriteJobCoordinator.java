@@ -60,27 +60,25 @@ public class WriteJobCoordinator<T extends OutputStream, W, P extends PendingWri
     return backgroundJobCoordinator.hasInFlightJobs();
   }
 
-  public void addWrites(P writes) {
+  public synchronized void addWrites(P writes) {
     Preconditions.checkState(!hasMaxInFlightWriters());
     Preconditions.checkState(isUsable());
-    synchronized (this) {
-      if (state == State.UNINITIALIZED) {
-        if (baseDeltaFiles.hasInUseBase()) {
-          state = State.WRITE_DELTAS;
-        } else {
-          LOGGER.info("Creating new base for writes");
-          Preconditions.checkState(!baseDeltaFiles.baseFileExists());
-          state = State.WRITING_BASE;
-          createWriteJob(true, -1, writes, baseDeltaFiles.getBaseOperations(),
-              baseDeltaFiles.getBaseIndexOperations());
-          return;
-        }
+    if (state == State.UNINITIALIZED) {
+      if (baseDeltaFiles.hasInUseBase()) {
+        state = State.WRITE_DELTAS;
+      } else {
+        LOGGER.info("Creating new base for writes");
+        Preconditions.checkState(!baseDeltaFiles.baseFileExists());
+        state = State.WRITING_BASE;
+        createWriteJob(true, -1, writes, baseDeltaFiles.getBaseOperations(),
+            baseDeltaFiles.getBaseIndexOperations());
+        return;
       }
-      LOGGER.info("Creating new delta for writes");
-      var delta = baseDeltaFiles.allocateDelta();
-      createWriteJob(false, delta, writes, baseDeltaFiles.getDeltaOperations(delta),
-          baseDeltaFiles.getDeltaIndexOperations(delta));
     }
+    LOGGER.info("Creating new delta for writes");
+    var delta = baseDeltaFiles.allocateDelta();
+    createWriteJob(false, delta, writes, baseDeltaFiles.getDeltaOperations(delta),
+        baseDeltaFiles.getDeltaIndexOperations(delta));
   }
 
   public void awaitNextJobCompletion() throws InterruptedException {
@@ -99,20 +97,18 @@ public class WriteJobCoordinator<T extends OutputStream, W, P extends PendingWri
     backgroundJobCoordinator.execute(job);
   }
 
-  void commitWrites(WriteJob<T, W, P> writer) {
+  synchronized void commitWrites(WriteJob<T, W, P> writer) {
     if (anyWriteAborted) {
       LOGGER.warning("Not committing " + writer.getName() + " since an earlier writer aborted");
       abortWrites(writer);
     } else {
-      synchronized (this) {
-        if (state == State.WRITING_BASE && !writer.isBase()) {
-          // we cannot write a delta before writing the base so wait
-          LOGGER.info(() -> "Writer " + writer.getName() + " finished before the initial base finished. " +
-              "Will re-attempt to commit this later");
-          executor.schedule(() -> reattemptCommitWrites(writer, 1), 1, TimeUnit.SECONDS);
-        } else {
-          commitWritesWithLogging(writer);
-        }
+      if (state == State.WRITING_BASE && !writer.isBase()) {
+        // we cannot write a delta before writing the base so wait
+        LOGGER.info(() -> "Writer " + writer.getName() + " finished before the initial base finished. " +
+            "Will re-attempt to commit this later");
+        executor.schedule(() -> reattemptCommitWrites(writer, 1), 1, TimeUnit.SECONDS);
+      } else {
+        commitWritesWithLogging(writer);
       }
     }
   }
@@ -128,13 +124,13 @@ public class WriteJobCoordinator<T extends OutputStream, W, P extends PendingWri
         baseDeltaFiles.addDelta(writer.getDelta());
       }
       writer.getPendingWrites().freeWriteAheadLog();
-    } catch (Exception e) {
-      LOGGER.log(Level.SEVERE, e, () -> "error in committing writes. aborting");
+    } catch (Throwable e) {
+      LOGGER.log(Level.SEVERE, "error in committing writes. aborting", e);
       abortWrites(writer);
     }
   }
 
-  private void reattemptCommitWrites(WriteJob<T, W, P> writer, int count) {
+  private synchronized void reattemptCommitWrites(WriteJob<T, W, P> writer, int count) {
     LOGGER.info(() -> "Reattempting " + writer.getName() + " count=" + count);
     Preconditions.checkState(!writer.isBase());
     if (state == State.WRITING_BASE) {
@@ -145,14 +141,8 @@ public class WriteJobCoordinator<T extends OutputStream, W, P extends PendingWri
         LOGGER.info("Still writing base after " + count + " attempts. Will reattempt commit of " + writer.getName());
         executor.schedule(() -> reattemptCommitWrites(writer, count + 1), 2 << count, TimeUnit.SECONDS);
       }
-      return;
-    }
-    try {
-      Preconditions.checkState(state == State.WRITE_DELTAS);
-      commitWrites(writer);
-    } catch (Exception e) {
-      LOGGER.log(Level.SEVERE, e, () -> "error in committing writes. aborting");
-      abortWrites(writer);
+    } else {
+      commitWritesWithLogging(writer);
     }
   }
 

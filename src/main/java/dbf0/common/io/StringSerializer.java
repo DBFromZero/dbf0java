@@ -21,4 +21,12 @@ public class StringSerializer implements Serializer<String> {
     IOUtil.writeVariableLengthUnsignedInt(s, x.length());
     s.write(a);
   }
+
+  public static SerializationPair<String> serializationPair(Charset charset) {
+    return new SerializationPair<>(new StringSerializer(charset), new StringDeserializer(charset));
+  }
+
+  public static SerializationPair<String> serializationPair() {
+    return serializationPair(Charset.defaultCharset());
+  }
 }

@@ -4,7 +4,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.TreeMultimap;
-import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.io.*;
 import dbf0.disk_key_value.readonly.multivalue.InMemoryMultiValueResult;
@@ -23,24 +22,16 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static dbf0.disk_key_value.readwrite.lsmtree.multivalue.MVLUtil.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class MultiValueSelectorIteratorTest {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(MultiValueSelectorIteratorTest.class);
-  private static final Comparator<String> KEY_COMPARATOR = String::compareTo;
-  private static final Comparator<Integer> VALUE_COMPARATOR = Integer::compareTo;
-
-  private static final String KEY_A = "A";
-  private static final String KEY_B = "B";
-  private static final String KEY_C = "C";
-  private static final ValueWrapper<Integer> PUT_1 = put(1);
-  private static final ValueWrapper<Integer> PUT_2 = put(2);
-  private static final ValueWrapper<Integer> DEL_1 = del(1);
 
 
-  @Before public void setUp() throws Exception {
+  @Before public void setUp() {
     Dbf0Util.enableConsoleLogging(Level.FINER, true);
   }
 
@@ -302,25 +293,17 @@ public class MultiValueSelectorIteratorTest {
     assertThat(entry.getValue()).hasSize(1).element(0).isEqualTo(value);
   }
 
-  private static ValueWrapper<Integer> put(int i) {
-    return new ValueWrapper<>(false, i);
-  }
-
-  private static ValueWrapper<Integer> del(int i) {
-    return new ValueWrapper<>(true, i);
-  }
-
   private static MultiValueSelectorIterator.KeyMultiValueRank<String, Integer> keyMultiValueRank(
       String key, Integer rank, List<ValueWrapper<Integer>> values) {
     return new MultiValueSelectorIterator.KeyMultiValueRank<>(key,
         new InMemoryMultiValueResult<>(values), rank);
   }
 
+  @SafeVarargs @SuppressWarnings("varargs")
   private static MultiValueSelectorIterator.KeyMultiValueRank<String, Integer> keyMultiValueRank(
       String key, Integer rank, ValueWrapper<Integer>... values) {
     return keyMultiValueRank(key, rank, List.of(values));
   }
-
 
   private static MultiValueSelectorIterator<String, Integer> iterator(
       List<MultiValueSelectorIterator.KeyMultiValueRank<String, Integer>> values) {
@@ -347,7 +330,7 @@ public class MultiValueSelectorIteratorTest {
     var valueSerialization = ValueWrapper.serializationPair(
         new SerializationPair<>(UnsignedIntSerializer.getInstance(), UnsignedIntDeserializer.getInstance()));
     var stream = new ByteArrayOutputStream();
-    try (var writer = new KeyMultiValueFileWriter<String, ValueWrapper<Integer>>(
+    try (var writer = new KeyMultiValueFileWriter<>(
         new StringSerializer(), valueSerialization.getSerializer(), stream)) {
       for (var entry : entries.asMap().entrySet()) {
         writer.writeKeysAndValues(entry.getKey(), entry.getValue());
@@ -365,17 +348,7 @@ public class MultiValueSelectorIteratorTest {
   }
 
   private static Multimap<String, ValueWrapper<Integer>> randomPutsAndDeletes(Random random) {
-    var result = new PutAndDeletes<String, Integer>(300);
-    IntStream.range(0, 50 + random.nextInt(100)).forEach(ignored -> {
-      var key = ByteArrayWrapper.random(random, 1).hexString();
-      var value = random.nextInt(64);
-      if (random.nextFloat() < 0.2) {
-        result.delete(key, value);
-      } else {
-        result.put(key, value);
-      }
-    });
-    return result.getCombined();
+    return randomPutAndDeletes(random).getCombined();
   }
 
   private static Multimap<String, ValueWrapper<Integer>> mergedMultimaps(

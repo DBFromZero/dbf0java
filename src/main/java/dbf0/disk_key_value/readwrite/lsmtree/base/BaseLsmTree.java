@@ -100,7 +100,6 @@ public abstract class BaseLsmTree<T extends OutputStream, K, V, W, P extends Pen
    *
    * @return whether the caller needs to call {@code waitForWritesToUnblock} after
    * releasing the lock
-   * @throws IOException
    */
   protected boolean checkMergeThreshold() throws IOException {
     if (pendingWrites.size() < configuration.getPendingWritesDeltaThreshold()) {
@@ -121,9 +120,7 @@ public abstract class BaseLsmTree<T extends OutputStream, K, V, W, P extends Pen
       boolean exit;
       do {
         while (coordinator.hasMaxInFlightWriters() && coordinator.isUsable()) {
-          synchronized (coordinator) {
-            coordinator.awaitNextJobCompletion();
-          }
+          coordinator.awaitNextJobCompletion();
         }
         exit = lock.callWithWriteLock(() -> {
           if (!coordinator.isUsable()) {

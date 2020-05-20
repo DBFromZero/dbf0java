@@ -12,7 +12,7 @@ import java.util.logging.Logger;
 public class WriteJob<T extends OutputStream, W, P extends PendingWrites<W>> implements Runnable {
 
   public interface SortAndWriter<T extends OutputStream, W> {
-    void sortAndWrite(T dataStream, T indexStream, W writes) throws IOException;
+    void sortAndWrite(T dataStream, T indexStream, W writes, boolean isBase) throws IOException;
   }
 
   private static final Logger LOGGER = Dbf0Util.getLogger(WriteJob.class);
@@ -69,7 +69,7 @@ public class WriteJob<T extends OutputStream, W, P extends PendingWrites<W>> imp
       indexOverWriter = indexFileOperations.createOverWriter();
 
       writer.sortAndWrite(overWriter.getOutputStream(), indexOverWriter.getOutputStream(),
-          pendingWrites.getWrites());
+          pendingWrites.getWrites(), isBase);
 
       overWriter.commit();
       indexOverWriter.commit();

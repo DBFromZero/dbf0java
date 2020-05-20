@@ -14,8 +14,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -34,7 +34,7 @@ public class SortAndWriteKeyMultiValues<T extends OutputStream, K, V> implements
   }
 
   @Override
-  public void sortAndWrite(T dataStream, T indexStream, PutAndDeletes<K, V> writes) throws IOException {
+  public void sortAndWrite(T dataStream, T indexStream, PutAndDeletes<K, V> writes, boolean isBase) throws IOException {
     LOGGER.info(() -> "Sorting " + writes.size() + " writes");
     var entries = writes.getCombined().asMap().entrySet().stream()
         .sorted(Map.Entry.comparingByKey(configuration.getKeyComparator()))
@@ -52,11 +52,15 @@ public class SortAndWriteKeyMultiValues<T extends OutputStream, K, V> implements
           for (var keySet : entries) {
             var key = keySet.getKey();
             indexBuilder.accept(outputStream.getPosition(), key);
-            List<ValueWrapper<V>> values = new ArrayList<>(keySet.getValue());
-            values.sort(wrapperComparator);
-            writer.writeKeysAndValues(key, values);
-            keyCount++;
-            valueCount += values.size();
+            var values = isBase ?
+                keySet.getValue().stream().filter(Predicate.not(ValueWrapper::isDelete)).collect(Collectors.toList()) :
+                new ArrayList<>(keySet.getValue());
+            if (!values.isEmpty()) {
+              values.sort(wrapperComparator);
+              writer.writeKeysAndValues(key, values);
+              keyCount++;
+              valueCount += values.size();
+            }
           }
         }
       }

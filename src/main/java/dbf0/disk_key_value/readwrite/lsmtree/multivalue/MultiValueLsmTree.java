@@ -22,7 +22,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class MultiValueLsmTree<T extends OutputStream, K, V>
@@ -195,9 +194,6 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
       }
     }
 
-    if (LOGGER.isLoggable(Level.FINE)) {
-      LOGGER.fine(orderedResults.toString() + " base=" + baseResults);
-    }
     if (orderedResults.isEmpty()) {
       return MultiValueReadWriteStorage.emptyResult();
     } else if (orderedResults.size() == 1) {

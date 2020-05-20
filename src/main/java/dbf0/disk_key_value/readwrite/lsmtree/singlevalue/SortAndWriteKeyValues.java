@@ -26,7 +26,7 @@ public class SortAndWriteKeyValues<T extends OutputStream, K, V> implements Writ
     this.configuration = configuration;
   }
 
-  @Override public void sortAndWrite(T dataStream, T indexStream, Map<K, V> writes) throws IOException {
+  @Override public void sortAndWrite(T dataStream, T indexStream, Map<K, V> writes, boolean isBase) throws IOException {
     LOGGER.info(() -> "Sorting " + writes.size() + " writes");
     var sortedEntries = new ArrayList<>(writes.entrySet());
     sortedEntries.sort(Map.Entry.comparingByKey(configuration.getKeyComparator()));

@@ -13,6 +13,14 @@ public class UnsignedIntSerializer implements Serializer<Integer> {
     return INSTANCE;
   }
 
+  private static final SerializationPair<Integer> PAIR = new SerializationPair<>(
+      UnsignedIntSerializer.getInstance(), UnsignedIntDeserializer.getInstance()
+  );
+
+  @NotNull public static SerializationPair<Integer> serializationPair() {
+    return PAIR;
+  }
+
   private UnsignedIntSerializer() {
   }
 

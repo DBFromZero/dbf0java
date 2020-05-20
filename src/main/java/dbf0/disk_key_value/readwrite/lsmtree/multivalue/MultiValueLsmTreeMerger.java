@@ -13,11 +13,11 @@ import dbf0.disk_key_value.readwrite.lsmtree.base.BaseDeltaMergerCron;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class MultiValueLsmTreeMerger<K, V> implements BaseDeltaMergerCron.Merger {
 
@@ -39,23 +39,30 @@ public class MultiValueLsmTreeMerger<K, V> implements BaseDeltaMergerCron.Merger
                     BaseDeltaMergerCron.ShutdownChecker shutdownChecker)
       throws IOException, BaseDeltaMergerCron.ShutdownWhileMerging {
 
-    var orderedReaders = new ArrayList<KeyMultiValueFileReader<K, ValueWrapper<V>>>(orderedInputStreams.size());
-    for (var stream : orderedInputStreams) {
-      orderedReaders.add(new KeyMultiValueFileReader<>(configuration.getKeySerialization().getDeserializer(),
-          configuration.getValueSerialization().getDeserializer(), stream));
-    }
+    var orderedReaders = orderedInputStreams.stream().map(stream ->
+        new KeyMultiValueFileReader<>(configuration.getKeySerialization().getDeserializer(),
+            configuration.getValueSerialization().getDeserializer(), stream))
+        .collect(Collectors.toList());
     var selectedIterator = MultiValueSelectorIterator.createSortedAndSelectedIterator(
         orderedReaders, configuration.getKeyComparator(), valueComparator);
 
-    var writer = new KeyMultiValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
-        configuration.getValueSerialization().getSerializer(),
-        baseOutputStream);
+    try (var writer = new KeyMultiValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
+        configuration.getValueSerialization().getSerializer(), baseOutputStream)) {
 
-    var indexWriter = new KeyValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
-        UnsignedLongSerializer.getInstance(),
-        new BufferedOutputStream(indexOutputStream, BaseDeltaMergerCron.BUFFER_SIZE));
-    var indexBuilder = IndexBuilder.indexBuilder(indexWriter, configuration.getIndexRate());
+      try (var indexWriter = new KeyValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
+          UnsignedLongSerializer.getInstance(), indexOutputStream)) {
+        var indexBuilder = IndexBuilder.indexBuilder(indexWriter, configuration.getIndexRate());
 
+        write(baseOutputStream, shutdownChecker, selectedIterator, writer, indexBuilder);
+      }
+    }
+  }
+
+  private void write(PositionTrackingStream baseOutputStream,
+                     BaseDeltaMergerCron.ShutdownChecker shutdownChecker,
+                     MultiValueSelectorIterator<K, V> selectedIterator,
+                     KeyMultiValueFileWriter<K, ValueWrapper<V>> writer,
+                     IndexBuilder<K> indexBuilder) throws IOException, BaseDeltaMergerCron.ShutdownWhileMerging {
     long keyCount = 0, valueCount = 0, lastCheckValueCount = 0;
     while (selectedIterator.hasNext()) {
       if (valueCount - lastCheckValueCount > 50000) {

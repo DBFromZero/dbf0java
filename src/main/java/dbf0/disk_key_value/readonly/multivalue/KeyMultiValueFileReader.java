@@ -10,6 +10,7 @@ import dbf0.disk_key_value.readonly.base.BaseKeyValueFileReader;
 
 import javax.annotation.Nullable;
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.NoSuchElementException;
@@ -31,7 +32,8 @@ public class KeyMultiValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> 
                                                                   Deserializer<V> valueDeserializer,
                                                                   InputStream stream) {
     return new KeyMultiValueFileReader<>(keyDeserializer, valueDeserializer,
-        new BufferedInputStream(stream, DEFAULT_BUFFER_SIZE));
+        (stream instanceof BufferedInputStream || stream instanceof ByteArrayInputStream) ? stream :
+            new BufferedInputStream(stream, DEFAULT_BUFFER_SIZE));
   }
 
   @Nullable public K readKey() throws IOException {
@@ -81,7 +83,7 @@ public class KeyMultiValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> 
   public IOIterator<V> valueIterator() {
     Preconditions.checkState(inputStream != null, "already closed");
     if (valueIterator == null) {
-      valueIterator = new IOIterator<V>() {
+      valueIterator = new IOIterator<>() {
         @Override public boolean hasNext() {
           return valuesRemaining > 0;
         }

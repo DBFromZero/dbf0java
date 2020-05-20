@@ -183,7 +183,9 @@ public class MultiValueReadWriteStorageTester<K, V> {
     if (xs instanceof List && xs instanceof RandomAccess) {
       return ((List<X>) xs).get(index);
     }
-    return xs.stream().skip(index).findAny().get();
+    var first = xs.stream().skip(index).findFirst();
+    Preconditions.checkState(first.isPresent());
+    return first.get();
   }
 
   private void doDelete(@Nullable SetMultimap<K, V> map, boolean known, K key, V value) {
@@ -195,7 +197,7 @@ public class MultiValueReadWriteStorageTester<K, V> {
   }
 
   private void doGet(SetMultimap<K, V> map, boolean known, K key) {
-    print("get " + key);
+    print("get ", key, " expected", known ? map.get(key).size() : 0);
     var a = assertThat(adapter.get(key)).describedAs("key=%s", key);
     if (known) {
       a.containsExactlyInAnyOrderElementsOf(map.get(key));

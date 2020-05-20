@@ -42,10 +42,8 @@ public class FixedSizeBackgroundJobCoordinator<X extends Runnable> {
     executor.execute(() -> run(job));
   }
 
-  public void awaitNextJobCompletion() throws InterruptedException {
-    synchronized (this) {
-      wait();
-    }
+  public synchronized void awaitNextJobCompletion() throws InterruptedException {
+    wait();
   }
 
   public void waitUntilExecute(X job) throws InterruptedException {

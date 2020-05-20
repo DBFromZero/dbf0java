@@ -40,10 +40,10 @@ public class MultiValueLsmTreeTest {
           .withIndexRate(10)
           .withMaxInFlightWriteJobs(3)
           .withMaxDeltaReadPercentage(0.5)
-          .withMergeCronFrequency(Duration.ofMillis(100))
+          .withMergeCronFrequency(Duration.ofMillis(500))
           .build();
 
-  @Before public void setUp() throws Exception {
+  @Before public void setUp() {
     Dbf0Util.enableConsoleLogging(Level.FINER, true);
   }
 
@@ -77,16 +77,13 @@ public class MultiValueLsmTreeTest {
   }
 
   @Test public void testSingleThreaded() throws IOException {
-    var lsmTree = createLsmTree(CONFIGURATION.toBuilder()
-        .withPendingWritesDeltaThreshold(250)
-        .withMergeCronFrequency(Duration.ofHours(10))
-        .build());
+    var lsmTree = createLsmTree(1000);
     var operations = lsmTree.getLeft();
     var tree = lsmTree.getRight();
     var count = new AtomicInteger(0);
 
     var tester = MultiValueReadWriteStorageTester.builderForBytes(tree, RandomSeed.CAFE.random(), 4, 6)
-        .debug(true)
+        .debug(false)
         .iterationCallback((ignored) -> {
           if (count.incrementAndGet() % 1000 == 0) {
             LOGGER.info("iteration " + count.get() + " size " + Dbf0Util.formatBytes(getDirectorySize(operations)));
@@ -113,6 +110,7 @@ public class MultiValueLsmTreeTest {
       thread.join();
     }
     assertThat(errors.get()).isZero();
+    tree.close();
   }
 
   @Test public void testLoadExisting() throws IOException {
@@ -177,7 +175,7 @@ public class MultiValueLsmTreeTest {
   }
 
 
-  private long getDirectorySize(MemoryFileDirectoryOperations d) throws IOException {
+  private long getDirectorySize(MemoryFileDirectoryOperations d) {
     return d.list().stream().map(d::file).mapToLong(ReadOnlyFileOperations::length).sum();
   }
 
@@ -198,11 +196,13 @@ public class MultiValueLsmTreeTest {
       builder.iterationCallback((ignored) -> assertThat(errors.get()).isZero());
     }
     var tester = builder.build();
+    var name = putDeleteGet.name() + " " + knownKeyRate.name();
     return new Thread(() -> {
       try {
         tester.testPutDeleteGet(25 * 1000, putDeleteGet, knownKeyRate);
+        LOGGER.info("thread finished " + name);
       } catch (Exception e) {
-        LOGGER.log(Level.SEVERE, e, () -> "error in thread");
+        LOGGER.log(Level.SEVERE, "error in " + name + " thread", e);
         errors.incrementAndGet();
       }
     });
