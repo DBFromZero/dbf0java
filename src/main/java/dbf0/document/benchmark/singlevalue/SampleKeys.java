@@ -1,4 +1,4 @@
-package dbf0.document.benchmark;
+package dbf0.document.benchmark.singlevalue;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.Dbf0Util;
@@ -53,7 +53,7 @@ public class SampleKeys {
   }
 
   @NotNull private static List<DString> loadKeys(File directory, int partitions, int indexRate, int maxKeys,
-                                                 ScheduledExecutorService executor) throws InterruptedException, ExecutionException {
+                                                 ScheduledExecutorService executor) throws InterruptedException {
     var indexPaths = new ArrayList<File>();
     for (int partition = 0; partition < partitions; partition++) {
       var partitionDir = new File(directory, String.valueOf(partition));

@@ -9,10 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
-public interface MultiValueReadWriteStorage<K, V> extends Closeable {
-
-  default void initialize() throws IOException {
-  }
+public interface MultiValueReadWriteStorage<K, V> extends BaseReadWriteStorage<K, V> {
 
   void put(@NotNull K key, @NotNull V value) throws IOException;
 
@@ -52,15 +49,16 @@ public interface MultiValueReadWriteStorage<K, V> extends Closeable {
   }
 
 
-  Result EMPTY_RESULT = ((Supplier<Result>) () -> {
+  Result<Object> EMPTY_RESULT = ((Supplier<Result<Object>>) () -> {
     var emptyList = List.of();
+
     var emptyIterator = IOIterator.of(emptyList.iterator());
-    return new Result() {
+    return new Result<>() {
       @Override public IOIterator<Object> iterator() {
         return emptyIterator;
       }
 
-      @Override public void close() throws IOException {
+      @Override public void close() {
       }
 
       @Override public int knownSize() {
@@ -71,12 +69,13 @@ public interface MultiValueReadWriteStorage<K, V> extends Closeable {
         return 0;
       }
 
-      @Override public List realizeRemainingValues() throws IOException {
+      @Override public List<Object> realizeRemainingValues() {
         return emptyList;
       }
     };
   }).get();
 
+  @SuppressWarnings("unchecked")
   static <V> Result<V> emptyResult() {
     return (Result<V>) EMPTY_RESULT;
   }

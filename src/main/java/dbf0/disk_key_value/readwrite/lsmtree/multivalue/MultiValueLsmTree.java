@@ -100,7 +100,8 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
 
   public static <T extends OutputStream> Builder<T, DElement, DElement>
   builderForDocuments(LsmTreeConfiguration<DElement, ValueWrapper<DElement>> configuration) {
-    return builder(configuration);
+    Builder<T, DElement, DElement> builder = builder(configuration);
+    return builder.withValueComparator(DElement::compareTo);
   }
 
   public static <T extends OutputStream> Builder<T, ByteArrayWrapper, ByteArrayWrapper> builderForBytes() {
@@ -108,9 +109,7 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
   }
 
   public static <T extends OutputStream> Builder<T, DElement, DElement> builderForDocuments() {
-    Builder<T, DElement, DElement> b = builderForDocuments(
-        LsmTreeConfiguration.builderForMultiValueDocuments().build());
-    return b.withValueComparator(DElement::compareTo);
+    return builderForDocuments(LsmTreeConfiguration.builderForMultiValueDocuments().build());
   }
 
   private final Comparator<V> valueComparator;

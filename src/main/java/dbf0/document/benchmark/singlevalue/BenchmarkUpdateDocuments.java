@@ -1,4 +1,4 @@
-package dbf0.document.benchmark;
+package dbf0.document.benchmark.singlevalue;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
@@ -27,8 +27,8 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static dbf0.document.benchmark.BenchmarkGetDocuments.loadKeys;
-import static dbf0.document.benchmark.BenchmarkLoadDocuments.fileSize;
+import static dbf0.document.benchmark.singlevalue.BenchmarkGetDocuments.loadKeys;
+import static dbf0.document.benchmark.singlevalue.BenchmarkLoadDocuments.fileSize;
 
 public class BenchmarkUpdateDocuments {
   private static final Logger LOGGER = Dbf0Util.getLogger(BenchmarkUpdateDocuments.class);

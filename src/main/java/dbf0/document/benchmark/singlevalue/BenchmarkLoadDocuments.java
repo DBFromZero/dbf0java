@@ -1,4 +1,4 @@
-package dbf0.document.benchmark;
+package dbf0.document.benchmark.singlevalue;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
@@ -140,7 +140,7 @@ public class BenchmarkLoadDocuments {
         .build();
   }
 
-  private static void readQueue(AtomicInteger errors, File file, long start, long end, BlockingQueue<String> queue) {
+  public static void readQueue(AtomicInteger errors, File file, long start, long end, BlockingQueue<String> queue) {
     try (var channel = FileChannel.open(file.toPath())) {
       var result = channel.position(start);
       Preconditions.checkState(result == channel);
@@ -192,8 +192,8 @@ public class BenchmarkLoadDocuments {
     }
   }
 
-  private static void report(AtomicInteger errors, AtomicLong writes,
-                             File directory, long startTime) {
+  public static void report(AtomicInteger errors, AtomicLong writes,
+                            File directory, long startTime) {
     if (errors.get() != 0) {
       return;
     }
@@ -212,7 +212,7 @@ public class BenchmarkLoadDocuments {
         Dbf0Util.formatBytes(size)));
   }
 
-  static long fileSize(File f) {
+  public static long fileSize(File f) {
     try {
       if (f.isFile()) {
         return f.length();

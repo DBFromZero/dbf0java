@@ -1,4 +1,4 @@
-package dbf0.document.benchmark;
+package dbf0.document.benchmark.singlevalue;
 
 import com.google.common.base.Joiner;
 import dbf0.common.io.SizePrefixedDeserializer;

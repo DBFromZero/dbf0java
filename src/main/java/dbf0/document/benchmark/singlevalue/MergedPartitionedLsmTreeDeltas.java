@@ -1,4 +1,4 @@
-package dbf0.document.benchmark;
+package dbf0.document.benchmark.singlevalue;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.Dbf0Util;

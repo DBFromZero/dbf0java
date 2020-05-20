@@ -3,13 +3,9 @@ package dbf0.disk_key_value.readwrite;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
-import java.io.Closeable;
 import java.io.IOException;
 
-public interface ReadWriteStorage<K, V> extends Closeable {
-
-  default void initialize() throws IOException {
-  }
+public interface ReadWriteStorage<K, V> extends BaseReadWriteStorage<K, V> {
 
   long size() throws IOException;
 
@@ -18,7 +14,4 @@ public interface ReadWriteStorage<K, V> extends Closeable {
   @Nullable V get(@NotNull K key) throws IOException;
 
   boolean delete(@NotNull K key) throws IOException;
-
-  @Override default void close() throws IOException {
-  }
 }

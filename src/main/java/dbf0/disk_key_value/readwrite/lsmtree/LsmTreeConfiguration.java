@@ -187,7 +187,7 @@ public class LsmTreeConfiguration<K, V> {
   public static Builder<DElement, ValueWrapper<DElement>> builderForMultiValueDocuments() {
     return LsmTreeConfiguration.<DElement, ValueWrapper<DElement>>builder()
         .withKeySerialization(DElement.serializationPair())
-        .withValueSerialization(ValueWrapper.serializationPair(DElement.serializationPair()))
+        .withValueSerialization(ValueWrapper.serializationPair(DElement.sizePrefixedSerializationPair()))
         .withKeyComparator(DElement::compareTo);
   }
 }

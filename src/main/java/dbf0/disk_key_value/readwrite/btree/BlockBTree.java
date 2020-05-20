@@ -25,6 +25,10 @@ public class BlockBTree<K extends Comparable<K>, V> implements BTree<K, V> {
     rootId = root.id;
   }
 
+  @Override public void close() throws IOException {
+    storage.close();
+  }
+
   private Node<K, V> getRoot() {
     Preconditions.checkState(rootId != BTreeStorage.NO_ID, "not initialized");
     return storage.getNode(rootId);
