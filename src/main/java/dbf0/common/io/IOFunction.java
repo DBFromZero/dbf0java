@@ -15,6 +15,10 @@ public interface IOFunction<T, R> {
     return new Wrapper<>(x);
   }
 
+  static <T, R> IOFunction<T, R> of(Function<T, R> function) {
+    return function::apply;
+  }
+
   class Wrapper<T, R> implements Function<T, R> {
 
     private final IOFunction<T, R> delegate;

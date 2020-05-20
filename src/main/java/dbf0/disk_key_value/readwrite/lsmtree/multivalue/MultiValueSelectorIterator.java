@@ -100,7 +100,7 @@ import java.util.stream.Collectors;
 
   private static <K, V> IOIterator<KeyMultiValueRank<K, V>> addRank(
       IOIterator<Pair<K, MultiValueResult<ValueWrapper<V>>>> iterator, int rank) {
-    return iterator.transform(pair -> new KeyMultiValueRank<>(pair.getKey(), pair.getValue(), rank));
+    return iterator.map(pair -> new KeyMultiValueRank<>(pair.getKey(), pair.getValue(), rank));
   }
 
   @VisibleForTesting
@@ -128,18 +128,8 @@ import java.util.stream.Collectors;
     }
 
     IOIterator<ValueRank<V>> rankedValuesIterator() {
-      return values.valueIterator().transform(value -> new ValueRank<>(value, rank));
+      return values.valueIterator().map(value -> new ValueRank<>(value, rank));
     }
   }
 
-  @VisibleForTesting
-  static final class ValueRank<V> {
-    final ValueWrapper<V> value;
-    final int rank;
-
-    @VisibleForTesting ValueRank(ValueWrapper<V> value, int rank) {
-      this.value = value;
-      this.rank = rank;
-    }
-  }
 }

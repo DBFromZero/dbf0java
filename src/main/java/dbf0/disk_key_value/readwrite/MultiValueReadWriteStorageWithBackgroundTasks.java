@@ -2,10 +2,8 @@ package dbf0.disk_key_value.readwrite;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.Dbf0Util;
-import dbf0.disk_key_value.readonly.multivalue.MultiValueResult;
 import org.jetbrains.annotations.NotNull;
 
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
@@ -47,7 +45,7 @@ public class MultiValueReadWriteStorageWithBackgroundTasks<K, V> implements Mult
     delegate.put(key, value);
   }
 
-  @Nullable @Override public MultiValueResult<V> get(@NotNull K key) throws IOException {
+  @NotNull @Override public Result<V> get(@NotNull K key) throws IOException {
     return delegate.get(key);
   }
 

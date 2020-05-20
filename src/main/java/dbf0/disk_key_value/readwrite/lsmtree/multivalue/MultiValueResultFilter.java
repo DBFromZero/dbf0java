@@ -19,7 +19,7 @@ public class MultiValueResultFilter<V> implements MultiValueResult<V> {
     this.inner = inner;
   }
 
-  @Nullable public static <V> MultiValueResultFilter<V> create(List<MultiValueResult<ValueWrapper<V>>> results) {
+  @Nullable public static <V> MultiValueResult<V> create(List<MultiValueResult<ValueWrapper<V>>> results) {
     if (results == null || results.isEmpty()) {
       return null;
     } else if (results.size() == 1) {

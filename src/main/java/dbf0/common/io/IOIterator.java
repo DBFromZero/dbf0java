@@ -30,8 +30,12 @@ public interface IOIterator<E> extends Closeable {
     return wrap(this);
   }
 
-  default <R> IOIterator<R> transform(IOFunction<E, R> function) {
+  default <R> IOIterator<R> map(IOFunction<E, R> function) {
     return new TransformedIOIterator<>(this, function);
+  }
+
+  default IOIterator<E> filter(IOPredicate<E> predicate) {
+    return new FilteredIOIterator<>(this, predicate);
   }
 
   static <E> Wrapper<E> wrap(IOIterator<E> x) {

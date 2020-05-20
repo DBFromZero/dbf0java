@@ -38,4 +38,8 @@ public class MultiValueResultImp<V> implements MultiValueResult<V> {
   @Override public void close() throws IOException {
     reader.close();
   }
+
+  @Override public String toString() {
+    return "MVR{" + reader.toString() + "}";
+  }
 }

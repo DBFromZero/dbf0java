@@ -5,7 +5,6 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 @VisibleForTesting
@@ -34,7 +33,7 @@ class PutAndDeletes<K, V> {
     puts.remove(key, value);
   }
 
-  Collection<ValueWrapper<V>> getValues(K key) {
+  List<ValueWrapper<V>> getValues(K key) {
     var ps = puts.get(key);
     var ds = deletes.get(key);
     var pn = ps.size();

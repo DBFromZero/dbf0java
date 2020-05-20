@@ -6,7 +6,6 @@ import dbf0.common.Dbf0Util;
 import dbf0.common.io.IOFunction;
 import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
 import dbf0.disk_key_value.io.ReadOnlyFileOperations;
-import dbf0.disk_key_value.readonly.multivalue.MultiValueResult;
 import dbf0.disk_key_value.readwrite.MultiValueReadWriteStorage;
 import dbf0.disk_key_value.readwrite.MultiValueReadWriteStorageTester;
 import dbf0.disk_key_value.readwrite.lsmtree.LsmTreeConfiguration;
@@ -14,6 +13,7 @@ import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
 import dbf0.test.RandomSeed;
 import org.apache.commons.lang3.tuple.Pair;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -63,23 +63,24 @@ public class MultiValueLsmTreeTest {
 
     var res = tree.get(key);
     assertThat(res).isNotNull();
-    assertThat(res.count()).isEqualTo(1);
+    var iterator = res.iterator();
+    assertThat(iterator.hasNext()).isTrue();
+    assertThat(iterator.next()).isEqualTo(value);
+    assertThat(iterator.hasNext()).isFalse();
 
-    var resValue = res.readValue();
-    assertThat(res.remaining()).isZero();
-    assertThat(resValue).isEqualTo(value);
 
     tree.delete(key, value);
     res = tree.get(key);
-    if (res != null) {
-      assertThat(res.realizeRemaining()).isEmpty();
-    }
+    assertThat(res.knownSize()).isEqualTo(0);
 
     tree.close();
   }
 
   @Test public void testSingleThreaded() throws IOException {
-    var lsmTree = createLsmTree(250);
+    var lsmTree = createLsmTree(CONFIGURATION.toBuilder()
+        .withPendingWritesDeltaThreshold(250)
+        .withMergeCronFrequency(Duration.ofHours(10))
+        .build());
     var operations = lsmTree.getLeft();
     var tree = lsmTree.getRight();
     var count = new AtomicInteger(0);
@@ -143,7 +144,7 @@ public class MultiValueLsmTreeTest {
       assertThat(readingTree.get(entry.getKey()))
           .describedAs("key=" + entry.getKey())
           .isNotNull()
-          .extracting(IOFunction.wrap(MultiValueResult::realizeRemaining))
+          .extracting(IOFunction.wrap(MultiValueReadWriteStorage.Result::realizeRemainingValues))
           .asList()
           .hasSize(1)
           .first()
@@ -154,15 +155,25 @@ public class MultiValueLsmTreeTest {
 
   private Pair<MemoryFileDirectoryOperations, MultiValueReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper>>
   createLsmTree(int pendingWritesDeltaThreshold) throws IOException {
-    var directoryOperations = new MemoryFileDirectoryOperations();
+    var configuration = CONFIGURATION.toBuilder().withPendingWritesDeltaThreshold(pendingWritesDeltaThreshold).build();
+    return createLsmTree(configuration);
+  }
+
+  private Pair<MemoryFileDirectoryOperations, MultiValueReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper>>
+  createLsmTree(MemoryFileDirectoryOperations directoryOperations,
+                LsmTreeConfiguration<ByteArrayWrapper, ValueWrapper<ByteArrayWrapper>> configuration) throws IOException {
     var tree = MultiValueLsmTree
-        .builderForBytes(
-            CONFIGURATION.toBuilder().withPendingWritesDeltaThreshold(pendingWritesDeltaThreshold).build(),
-            directoryOperations)
+        .builderForBytes(configuration, directoryOperations)
         .withScheduledThreadPool(2)
         .buildWithBackgroundTasks();
     tree.initialize();
     return Pair.of(directoryOperations, tree);
+  }
+
+  @NotNull
+  private Pair<MemoryFileDirectoryOperations, MultiValueReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper>>
+  createLsmTree(LsmTreeConfiguration<ByteArrayWrapper, ValueWrapper<ByteArrayWrapper>> configuration) throws IOException {
+    return createLsmTree(new MemoryFileDirectoryOperations(), configuration);
   }
 
 

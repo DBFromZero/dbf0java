@@ -1,10 +1,8 @@
 package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Predicates;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
 import com.google.common.collect.TreeMultimap;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
@@ -237,10 +235,15 @@ public class MultiValueSelectorIteratorTest {
 
     var results = HashMultimap.<String, ValueWrapper<Integer>>create(expected.asMap().size(), 8);
     var iter = MultiValueSelectorIterator.createSortedAndSelectedIterator(stores, KEY_COMPARATOR, VALUE_COMPARATOR);
+    String lastKey = null;
     while (iter.hasNext()) {
       var entry = iter.next();
       if (!entry.getValue().isEmpty()) {
         results.putAll(entry.getKey(), entry.getValue());
+        if (lastKey != null) {
+          assertThat(lastKey).isLessThan(entry.getKey());
+        }
+        lastKey = entry.getKey();
       }
     }
 
@@ -380,8 +383,16 @@ public class MultiValueSelectorIteratorTest {
     var merged = HashMultimap.<String, ValueWrapper<Integer>>
         create(mms.stream().mapToInt(Multimap::size).sum(), 8);
     for (var mm : mms) {
-      merged.putAll(mm);
+      for (var entry : mm.entries()) {
+        var key = entry.getKey();
+        var val = entry.getValue();
+        if (val.isDelete()) {
+          merged.remove(key, new ValueWrapper<>(false, val.getValue()));
+        } else {
+          merged.put(key, val);
+        }
+      }
     }
-    return Multimaps.filterValues(merged, Predicates.not(ValueWrapper::isDelete));
+    return merged;
   }
 }

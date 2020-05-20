@@ -40,4 +40,8 @@ public class PeekingIOIterator<E> implements IOIterator<E> {
     }
     return peekedElement;
   }
+
+  @Override public void close() throws IOException {
+    iterator.close();
+  }
 }

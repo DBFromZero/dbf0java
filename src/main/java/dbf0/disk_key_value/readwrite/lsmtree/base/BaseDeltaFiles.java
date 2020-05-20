@@ -98,10 +98,12 @@ public class BaseDeltaFiles<T extends OutputStream, K, V, R extends BaseRandomAc
     return nextDelta++;
   }
 
-  public synchronized void addDelta(Integer delta) throws IOException {
+  public void addDelta(Integer delta) throws IOException {
     LOGGER.info("Adding delta " + delta);
     Preconditions.checkState(hasInUseBase());
-    orderedInUseDeltas.put(delta, new ReaderWrapper<>(opener.open(getDeltaOperations(delta), getDeltaIndexOperations(delta))));
+    synchronized (this) {
+      orderedInUseDeltas.put(delta, new ReaderWrapper<>(opener.open(getDeltaOperations(delta), getDeltaIndexOperations(delta))));
+    }
   }
 
   public void commitNewBase(FileOperations.OverWriter<T> baseOverWriter,

@@ -1,5 +1,6 @@
 package dbf0.disk_key_value.readonly.multivalue;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import dbf0.common.io.Deserializer;
 import dbf0.common.io.EndOfStream;
@@ -108,5 +109,13 @@ public class KeyMultiValueFileReader<K, V> extends BaseKeyValueFileReader<K, V> 
     super.close();
     valuesCount = valuesRemaining = 0;
     valueIterator = null;
+  }
+
+  @Override public String toString() {
+    return MoreObjects.toStringHelper("KMVFR")
+        .add("valuesCount", valuesCount)
+        .add("valuesRemaining", valuesRemaining)
+        .add("inputStream", inputStream)
+        .toString();
   }
 }

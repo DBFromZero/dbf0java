@@ -15,15 +15,14 @@ import dbf0.document.types.DElement;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class MultiValueLsmTree<T extends OutputStream, K, V>
@@ -116,6 +115,10 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
   }
 
   private final Comparator<V> valueComparator;
+  private final Comparator<ValueWrapper<V>> valueWrapperComparator;
+  private final ThreadLocal<List<MultiValueResult<ValueWrapper<V>>>> localGetList =
+      ThreadLocal.withInitial(ArrayList::new);
+
 
   private MultiValueLsmTree(LsmTreeConfiguration<K, ValueWrapper<V>> configuration, Comparator<V> valueComparator,
                             BaseDeltaFiles<T, K, ValueWrapper<V>,
@@ -125,6 +128,7 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
                             BaseDeltaMergerCron<T> mergerCron) {
     super(configuration, baseDeltaFiles, coordinator, mergerCron);
     this.valueComparator = valueComparator;
+    this.valueWrapperComparator = ValueWrapper.comparator(valueComparator);
   }
 
   @Override public void initialize() throws IOException {
@@ -155,29 +159,63 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
     }
   }
 
-  @Nullable public MultiValueResult<V> get(@NotNull K key) throws IOException {
+  @NotNull public Result<V> get(@NotNull K key) throws IOException {
     Preconditions.checkState(isUsable());
-    // search through the various containers that could contain the key in the appropriate order
-    var orderedResults = new ArrayList<MultiValueResult<ValueWrapper<V>>>(8);
-    lock.runWithReadLock(() -> {
-      Preconditions.checkState(pendingWrites != null, "is closed");
-      var pendingVs = pendingWrites.getWrites().getValues(key);
-      if (!pendingVs.isEmpty()) {
-        orderedResults.add(new InMemoryMultiValueResult<>(pendingVs));
-      }
-    });
+
+    // ordered newest to oldest
+    var orderedResults = localGetList.get();
+    orderedResults.clear();
+
+    addSortedInMemoryValues(orderedResults,
+        lock.callWithReadLock(() -> {
+          Preconditions.checkState(pendingWrites != null, "is closed");
+          return pendingWrites.getWrites().getValues(key);
+        }));
+
     var jobs = coordinator.getCurrentInFlightJobs();
     for (int i = jobs.size() - 1; i >= 0; i--) {
-      var inProgressVs = jobs.get(i).getPendingWrites().getWrites().getValues(key);
-      if (!inProgressVs.isEmpty()) {
-        orderedResults.add(new InMemoryMultiValueResult<>(inProgressVs));
+      addSortedInMemoryValues(orderedResults, jobs.get(i).getPendingWrites().getWrites().getValues(key));
+    }
+
+    MultiValueResult<ValueWrapper<V>> baseResults = null;
+    if (baseDeltaFiles.hasInUseBase()) {
+      var orderedDeltas = baseDeltaFiles.getOrderedDeltaReaders();
+      for (int i = orderedDeltas.size() - 1; i >= 0; i--) {
+        var deltaWrapper = orderedDeltas.get(i);
+        var deltaResult = deltaWrapper.getLock().callWithReadLock(() ->
+            deltaWrapper.getReader() == null ? null : deltaWrapper.getReader().get(key));
+        if (deltaResult != null) {
+          orderedResults.add(deltaResult);
+        }
+      }
+      var baseWrapper = baseDeltaFiles.getBaseWrapper();
+      baseResults = baseWrapper.getLock().callWithReadLock(() -> Preconditions.checkNotNull(baseWrapper.getReader()).get(key));
+      if (baseResults != null) {
+        orderedResults.add(baseResults);
       }
     }
-    if (baseDeltaFiles.hasInUseBase()) {
-      addValuesFromStores(key, orderedResults);
+
+    if (LOGGER.isLoggable(Level.FINE)) {
+      LOGGER.fine(orderedResults.toString() + " base=" + baseResults);
     }
-    LOGGER.fine(orderedResults::toString);
-    return MultiValueResultFilter.create(orderedResults);
+    if (orderedResults.isEmpty()) {
+      return MultiValueReadWriteStorage.emptyResult();
+    } else if (orderedResults.size() == 1) {
+      return baseResults != null ? new ResultFromBase<>(baseResults) :
+          new ResultRemovingDeletesSingleSource<>(orderedResults.get(0));
+    } else {
+      return new ResultRemovingDeletesMultipleSource<>(orderedResults, valueComparator);
+    }
+  }
+
+  private void addSortedInMemoryValues(List<MultiValueResult<ValueWrapper<V>>> orderedResults,
+                                       List<ValueWrapper<V>> inMemory) {
+    if (!inMemory.isEmpty()) {
+      if (inMemory.size() > 1) {
+        inMemory.sort(valueWrapperComparator);
+      }
+      orderedResults.add(new InMemoryMultiValueResult<>(inMemory));
+    }
   }
 
   @Override protected MultiValuePendingWrites<K, V> createNewPendingWrites() {
@@ -186,31 +224,5 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
 
   @Override protected void sendWritesToCoordinator() {
     coordinator.addWrites(pendingWrites);
-  }
-
-  private void addValuesFromStores(K key, List<MultiValueResult<ValueWrapper<V>>> orderedResults) throws IOException {
-    // prioritize the later deltas and finally the base
-    recursivelySearchDeltasInReverse(baseDeltaFiles.getOrderedDeltaReaders().iterator(), key, orderedResults);
-    var baseWrapper = baseDeltaFiles.getBaseWrapper();
-    var baseResults = baseWrapper.getLock().callWithReadLock(() -> Preconditions.checkNotNull(baseWrapper.getReader()).get(key));
-    if (baseResults != null) {
-      orderedResults.add(baseResults);
-    }
-  }
-
-  void recursivelySearchDeltasInReverse(
-      Iterator<BaseDeltaFiles.ReaderWrapper<K, ValueWrapper<V>, RandomAccessKeyMultiValueFileReader<K, ValueWrapper<V>>>> iterator,
-      K key, List<MultiValueResult<ValueWrapper<V>>> orderedResults) throws IOException {
-    if (!iterator.hasNext()) {
-      return;
-    }
-    var wrapper = iterator.next();
-    var results = wrapper.getLock().callWithReadLock(() -> wrapper.getReader() == null ? null : wrapper.getReader().get(key));
-
-    recursivelySearchDeltasInReverse(iterator, key, orderedResults);
-
-    if (results != null) {
-      orderedResults.add(results);
-    }
   }
 }

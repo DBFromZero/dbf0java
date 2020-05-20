@@ -253,18 +253,8 @@ public class MultiValueReadWriteStorageTester<K, V> {
     }
 
     @Nullable List<V> get(K key) {
-      try {
-        var result = storage.get(key);
-        if (result == null) {
-          return List.of();
-        }
-        var list = new ArrayList<V>(result.count());
-        var iterator = result.valueIterator();
-        while (iterator.hasNext()) {
-          list.add(iterator.next());
-        }
-        result.close();
-        return list;
+      try (var result = storage.get(key)) {
+        return result.realizeRemainingValues();
       } catch (IOException e) {
         throw new AssertionError(
             Strings.lenientFormat("unexpected IOError for get() %s of %s", key, storage), e);
