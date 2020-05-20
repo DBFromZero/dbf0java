@@ -1,6 +1,5 @@
 package dbf0.disk_key_value.readonly.base;
 
-import dbf0.common.Dbf0Util;
 import dbf0.common.io.Deserializer;
 import dbf0.common.io.IOSupplier;
 import dbf0.common.io.UnsignedLongDeserializer;
@@ -35,14 +34,12 @@ public abstract class BaseRandomAccessKeyValueFileReader<K, V, R extends BaseKey
   }
 
   @NotNull
-  public static <K> KeyValueFileReader<K, Long> indexReader(Deserializer<K> keyDeserializer, InputStream stream)
-      throws IOException {
+  public static <K> KeyValueFileReader<K, Long> indexReader(Deserializer<K> keyDeserializer, InputStream stream) {
     return KeyValueFileReader.bufferStream(keyDeserializer, UnsignedLongDeserializer.getInstance(), stream);
   }
 
   @NotNull
-  public static <K> KeyValueFileIterator<K, Long> indexIterator(Deserializer<K> keyDeserializer, InputStream stream)
-      throws IOException {
+  public static <K> KeyValueFileIterator<K, Long> indexIterator(Deserializer<K> keyDeserializer, InputStream stream) {
     return new KeyValueFileIterator<>(indexReader(keyDeserializer, stream));
   }
 
@@ -50,13 +47,13 @@ public abstract class BaseRandomAccessKeyValueFileReader<K, V, R extends BaseKey
   public static <K> TreeMap<K, Long> readIndex(KeyValueFileIterator<K, Long> iterator, Comparator<K> keyComparator)
       throws IOException {
     var index = new TreeMap<K, Long>(keyComparator);
-    Dbf0Util.iteratorStream(iterator).forEach(
-        entry -> index.put(entry.getKey(), entry.getValue()));
+    iterator.forEachRemaining(entry -> index.put(entry.getKey(), entry.getValue()));
     return index;
   }
 
   @NotNull
-  public static <K extends Comparable<K>> TreeMap<K, Long> readIndex(KeyValueFileIterator<K, Long> iterator) throws IOException {
+  public static <K extends Comparable<K>> TreeMap<K, Long> readIndex(KeyValueFileIterator<K, Long> iterator)
+      throws IOException {
     return readIndex(iterator, null);
   }
 

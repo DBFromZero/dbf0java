@@ -68,10 +68,11 @@ public class MultiValueLsmTreeTest {
     assertThat(iterator.next()).isEqualTo(value);
     assertThat(iterator.hasNext()).isFalse();
 
-
     tree.delete(key, value);
     res = tree.get(key);
-    assertThat(res.knownSize()).isEqualTo(0);
+    assertThat(res.maxSize()).isEqualTo(1);
+    iterator = res.iterator();
+    assertThat(iterator.hasNext()).isFalse();
 
     tree.close();
   }
@@ -199,7 +200,7 @@ public class MultiValueLsmTreeTest {
     var name = putDeleteGet.name() + " " + knownKeyRate.name();
     return new Thread(() -> {
       try {
-        tester.testPutDeleteGet(25 * 1000, putDeleteGet, knownKeyRate);
+        tester.testPutDeleteGet(10 * 1000, putDeleteGet, knownKeyRate);
         LOGGER.info("thread finished " + name);
       } catch (Exception e) {
         LOGGER.log(Level.SEVERE, "error in " + name + " thread", e);

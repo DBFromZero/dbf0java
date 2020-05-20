@@ -1,13 +1,14 @@
 package dbf0.disk_key_value.readonly.singlevalue;
 
 import com.google.common.base.Preconditions;
+import dbf0.common.io.IOIterator;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
-import java.util.Iterator;
+import java.util.NoSuchElementException;
 
-public class KeyValueFileIterator<K, V> implements Iterator<Pair<K, V>> {
+public class KeyValueFileIterator<K, V> implements IOIterator<Pair<K, V>> {
   private final KeyValueFileReader<K, V> reader;
   private boolean hasReadNext = false;
   private Pair<K, V> next = null;
@@ -17,7 +18,7 @@ public class KeyValueFileIterator<K, V> implements Iterator<Pair<K, V>> {
   }
 
   @Override
-  public boolean hasNext() {
+  public boolean hasNext() throws IOException {
     if (!hasReadNext) {
       next = readNext();
       hasReadNext = next != null;
@@ -26,9 +27,9 @@ public class KeyValueFileIterator<K, V> implements Iterator<Pair<K, V>> {
   }
 
   @Override
-  public Pair<K, V> next() {
-    if (!hasNext()) {
-      throw new RuntimeException("no next");
+  public Pair<K, V> next() throws IOException {
+    if (!hasReadNext && !hasNext()) {
+      throw new NoSuchElementException();
     }
     hasReadNext = false;
     var n = next;
@@ -37,11 +38,7 @@ public class KeyValueFileIterator<K, V> implements Iterator<Pair<K, V>> {
   }
 
   @Nullable
-  private Pair<K, V> readNext() {
-    try {
-      return reader.readKeyValue();
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
+  private Pair<K, V> readNext() throws IOException {
+    return reader.readKeyValue();
   }
 }

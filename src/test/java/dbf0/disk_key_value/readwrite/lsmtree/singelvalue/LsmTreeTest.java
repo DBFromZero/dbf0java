@@ -19,7 +19,6 @@ import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
 import dbf0.test.RandomSeed;
 import io.vavr.control.Either;
-import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Before;
 import org.junit.Test;
@@ -52,7 +51,7 @@ public class LsmTreeTest {
       .withMergeCronFrequency(Duration.ofMillis(100))
       .build();
 
-  @Before public void setUp() throws Exception {
+  @Before public void setUp() {
     Dbf0Util.enableConsoleLogging(Level.FINER, true);
   }
 
@@ -165,13 +164,13 @@ public class LsmTreeTest {
     var operations = new MemoryFileDirectoryOperations();
     var tree = LsmTree.<MemoryFileOperations.MemoryOutputStream>builderForDocuments(
         LsmTreeConfiguration.builderForDocuments()
-            .withPendingWritesDeltaThreshold(100)
+            .withPendingWritesDeltaThreshold(1000)
             .withIndexRate(10)
-            .withMaxInFlightWriteJobs(10)
-            .withMaxDeltaReadPercentage(0.5)
+            .withMaxInFlightWriteJobs(3)
+            .withMaxDeltaReadPercentage(0.75)
             .withMergeCronFrequency(Duration.ofMillis(100))
             .build())
-        .withScheduledThreadPool(2)
+        .withScheduledThreadPool(4)
         .withBaseDeltaFiles(operations)
         .buildWithBackgroundTasks();
     tree.initialize();
@@ -181,7 +180,7 @@ public class LsmTreeTest {
         .builder(tree)
         .knownKeySupplier(() -> randomDString(random, 4))
         .unknownKeySupplier(() -> randomDString(random, 5))
-        .valueSupplier(() -> randomDString(random, random.nextInt(2000)))
+        .valueSupplier(() -> randomDString(random, 100 + random.nextInt(100)))
         .random(random)
         .debug(false)
         .checkDeleteReturnValue(false)
@@ -190,11 +189,12 @@ public class LsmTreeTest {
             LOGGER.info("iteration " + count.get() + " size " + Dbf0Util.formatBytes(getDirectorySize(operations)));
           }
         }).build();
-    tester.testPutDeleteGet(20 * 1000, PutDeleteGet.BALANCED, KnownKeyRate.MID);
+    tester.testPutDeleteGet(50 * 1000, PutDeleteGet.BALANCED, KnownKeyRate.MID);
+    tree.close();
   }
 
   private DString randomDString(Random random, int bytes) {
-    return DString.of(Hex.encodeHexString(ByteArrayWrapper.random(random, bytes).getArray()));
+    return DString.of(ByteArrayWrapper.random(random, bytes).hexString());
   }
 
   private Pair<MemoryFileDirectoryOperations, ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper>>
@@ -215,7 +215,7 @@ public class LsmTreeTest {
   }
 
 
-  private long getDirectorySize(MemoryFileDirectoryOperations d) throws IOException {
+  private long getDirectorySize(MemoryFileDirectoryOperations d) {
     return d.list().stream().map(d::file).mapToLong(ReadOnlyFileOperations::length).sum();
   }
 

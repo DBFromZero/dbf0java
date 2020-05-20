@@ -1,6 +1,5 @@
 package dbf0.disk_key_value.readwrite.lsmtree.singlevalue;
 
-import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
 import dbf0.common.io.*;
 import dbf0.disk_key_value.readonly.IndexBuilder;
@@ -12,10 +11,10 @@ import dbf0.disk_key_value.readwrite.lsmtree.base.BaseDeltaMergerCron;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class LsmTreeMerger<K, V, X> implements BaseDeltaMergerCron.Merger {
 
@@ -37,7 +36,7 @@ public class LsmTreeMerger<K, V, X> implements BaseDeltaMergerCron.Merger {
     if (valueSerialization.getSerializer().isByteArrayEquivalent()) {
       try {
         // optimization to avoid de-serializing values when the value is size prefixed
-        return new LsmTreeMerger<K, V, ByteArrayWrapper>(configuration, ByteArraySerializer.serializationPair(),
+        return new LsmTreeMerger<>(configuration, ByteArraySerializer.serializationPair(),
             valueSerialization.getSerializer().serializeToBytes(configuration.getDeleteValue()));
       } catch (IOException e) {
         throw new IOExceptionWrapper(e);
@@ -47,46 +46,43 @@ public class LsmTreeMerger<K, V, X> implements BaseDeltaMergerCron.Merger {
     }
   }
 
-  @Override
-  public void merge(List<BufferedInputStream> orderedInputStreams,
-                    PositionTrackingStream baseOutputStream,
-                    BufferedOutputStream indexOutputStream,
-                    BaseDeltaMergerCron.ShutdownChecker shutdownChecker)
+  @Override public void merge(List<BufferedInputStream> orderedInputStreams,
+                              PositionTrackingStream baseOutputStream,
+                              BufferedOutputStream indexOutputStream,
+                              BaseDeltaMergerCron.ShutdownChecker shutdownChecker)
       throws IOException, BaseDeltaMergerCron.ShutdownWhileMerging {
-
-    var orderedReaders = new ArrayList<KeyValueFileReader<K, X>>(orderedInputStreams.size());
-    for (var stream : orderedInputStreams) {
-      orderedReaders.add(new KeyValueFileReader<>(configuration.getKeySerialization().getDeserializer(),
-          valueSerialization.getDeserializer(), stream));
-    }
+    var orderedReaders = orderedInputStreams.stream().map(stream ->
+        new KeyValueFileReader<>(configuration.getKeySerialization().getDeserializer(),
+            valueSerialization.getDeserializer(), stream))
+        .collect(Collectors.toList());
     var selectedIterator = ValueSelectorIterator.createSortedAndSelectedIterator(
         orderedReaders, configuration.getKeyComparator());
 
-    var writer = new KeyValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
-        valueSerialization.getSerializer(),
-        baseOutputStream);
+    try (var writer = new KeyValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
+        valueSerialization.getSerializer(), baseOutputStream)) {
 
-    var indexWriter = new KeyValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
-        UnsignedLongSerializer.getInstance(),
-        new BufferedOutputStream(indexOutputStream, BaseDeltaMergerCron.BUFFER_SIZE));
-    var indexBuilder = IndexBuilder.indexBuilder(indexWriter, configuration.getIndexRate());
+      try (var indexWriter = new KeyValueFileWriter<>(configuration.getKeySerialization().getSerializer(),
+          UnsignedLongSerializer.getInstance(), indexOutputStream)) {
+        var indexBuilder = IndexBuilder.indexBuilder(indexWriter, configuration.getIndexRate());
 
-    long i = 0, count = 0;
-    while (selectedIterator.hasNext()) {
-      if (i++ % 50000 == 0) {
-        if (LOGGER.isLoggable(Level.FINER)) {
-          LOGGER.finer("writing merged entry " + i + " at " + Dbf0Util.formatSize(baseOutputStream.getPosition()));
+        long i = 0, count = 0;
+        while (selectedIterator.hasNext()) {
+          if (i++ % 50000 == 0) {
+            if (LOGGER.isLoggable(Level.FINER)) {
+              LOGGER.finer("writing merged entry " + i + " at " + Dbf0Util.formatSize(baseOutputStream.getPosition()));
+            }
+            shutdownChecker.checkShutdown();
+          }
+          var entry = selectedIterator.next();
+          if (!entry.getValue().equals(deleteValue)) {
+            indexBuilder.accept(baseOutputStream.getPosition(), entry.getKey());
+            writer.append(entry.getKey(), entry.getValue());
+            count++;
+          }
         }
-        shutdownChecker.checkShutdown();
-      }
-      var entry = selectedIterator.next();
-      if (!entry.getValue().equals(deleteValue)) {
-        indexBuilder.accept(baseOutputStream.getPosition(), entry.getKey());
-        writer.append(entry.getKey(), entry.getValue());
-        count++;
+        LOGGER.fine("wrote " + count + " key/value pairs to new base with size " +
+            Dbf0Util.formatSize(baseOutputStream.getPosition()));
       }
     }
-    LOGGER.fine("wrote " + count + " key/value pairs to new base with size " +
-        Dbf0Util.formatSize(baseOutputStream.getPosition()));
   }
 }

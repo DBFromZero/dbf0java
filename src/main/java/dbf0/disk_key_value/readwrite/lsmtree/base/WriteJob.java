@@ -2,17 +2,22 @@ package dbf0.disk_key_value.readwrite.lsmtree.base;
 
 import com.google.common.base.Preconditions;
 import dbf0.common.Dbf0Util;
+import dbf0.common.io.PositionTrackingStream;
 import dbf0.disk_key_value.io.FileOperations;
 
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static dbf0.disk_key_value.readwrite.lsmtree.base.BaseDeltaMergerCron.BUFFER_SIZE;
+
 public class WriteJob<T extends OutputStream, W, P extends PendingWrites<W>> implements Runnable {
 
-  public interface SortAndWriter<T extends OutputStream, W> {
-    void sortAndWrite(T dataStream, T indexStream, W writes, boolean isBase) throws IOException;
+  public interface SortAndWriter<W> {
+    void sortAndWrite(PositionTrackingStream dataStream, BufferedOutputStream indexStream, W writes, boolean isBase)
+        throws IOException;
   }
 
   private static final Logger LOGGER = Dbf0Util.getLogger(WriteJob.class);
@@ -24,14 +29,14 @@ public class WriteJob<T extends OutputStream, W, P extends PendingWrites<W>> imp
   private final FileOperations<T> fileOperations;
   private final FileOperations<T> indexFileOperations;
   private final WriteJobCoordinator<T, W, P> coordinator;
-  private final SortAndWriter<T, W> writer;
+  private final SortAndWriter<W> writer;
 
   public WriteJob(String name, boolean isBase, int delta,
                   P pendingWrites,
                   FileOperations<T> fileOperations,
                   FileOperations<T> indexFileOperations,
                   WriteJobCoordinator<T, W, P> coordinator,
-                  SortAndWriter<T, W> writer) {
+                  SortAndWriter<W> writer) {
     this.name = name;
     this.isBase = isBase;
     this.delta = delta;
@@ -68,8 +73,11 @@ public class WriteJob<T extends OutputStream, W, P extends PendingWrites<W>> imp
       overWriter = fileOperations.createOverWriter();
       indexOverWriter = indexFileOperations.createOverWriter();
 
-      writer.sortAndWrite(overWriter.getOutputStream(), indexOverWriter.getOutputStream(),
-          pendingWrites.getWrites(), isBase);
+      try (var outputStream = new PositionTrackingStream(overWriter.getOutputStream(), BUFFER_SIZE)) {
+        try (var indexOutputStream = new BufferedOutputStream(indexOverWriter.getOutputStream(), BUFFER_SIZE)) {
+          writer.sortAndWrite(outputStream, indexOutputStream, pendingWrites.getWrites(), isBase);
+        }
+      }
 
       overWriter.commit();
       indexOverWriter.commit();

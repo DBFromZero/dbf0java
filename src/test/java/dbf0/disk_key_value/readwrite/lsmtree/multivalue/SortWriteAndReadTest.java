@@ -1,6 +1,7 @@
 package dbf0.disk_key_value.readwrite.lsmtree.multivalue;
 
 import dbf0.common.Dbf0Util;
+import dbf0.common.io.PositionTrackingStream;
 import dbf0.disk_key_value.io.MemoryFileOperations;
 import dbf0.disk_key_value.readonly.multivalue.KeyMultiValueFileReader;
 import dbf0.disk_key_value.readonly.multivalue.RandomAccessKeyMultiValueFileReader;
@@ -9,8 +10,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +26,7 @@ public class SortWriteAndReadTest {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(SortWriteAndReadTest.class);
 
-  private static final SortAndWriteKeyMultiValues<OutputStream, String, Integer> JOB =
+  private static final SortAndWriteKeyMultiValues<String, Integer> JOB =
       new SortAndWriteKeyMultiValues<>(CONFIGURATION, Integer::compareTo);
 
 
@@ -139,8 +140,8 @@ public class SortWriteAndReadTest {
       throws IOException {
     var dataOps = new MemoryFileOperations("data");
     var indexOps = new MemoryFileOperations("index");
-    try (var dataStream = dataOps.createAppendOutputStream()) {
-      try (var indexStream = indexOps.createAppendOutputStream()) {
+    try (var dataStream = new PositionTrackingStream(dataOps.createAppendOutputStream())) {
+      try (var indexStream = new BufferedOutputStream(indexOps.createAppendOutputStream())) {
         JOB.sortAndWrite(dataStream, indexStream, putAndDeletes, false);
       }
     }

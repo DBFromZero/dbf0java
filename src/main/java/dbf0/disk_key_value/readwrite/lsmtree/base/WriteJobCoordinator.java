@@ -28,7 +28,7 @@ public class WriteJobCoordinator<T extends OutputStream, W, P extends PendingWri
   private final BaseDeltaFiles<T, ?, ?, ?> baseDeltaFiles;
   private final ScheduledExecutorService executor;
   @Nullable private final WriteAheadLog<?> writeAheadLog;
-  private final WriteJob.SortAndWriter<T, W> writer;
+  private final WriteJob.SortAndWriter<W> writer;
   private final FixedSizeBackgroundJobCoordinator<WriteJob<T, W, P>> backgroundJobCoordinator;
 
   private final ReadWriteLockHelper lock = new ReadWriteLockHelper();
@@ -39,7 +39,7 @@ public class WriteJobCoordinator<T extends OutputStream, W, P extends PendingWri
   public WriteJobCoordinator(BaseDeltaFiles<T, ?, ?, ?> baseDeltaFiles,
                              ScheduledExecutorService executor,
                              @Nullable WriteAheadLog<?> writeAheadLog,
-                             WriteJob.SortAndWriter<T, W> writer,
+                             WriteJob.SortAndWriter<W> writer,
                              int maxInFlightJobs) {
     this.baseDeltaFiles = baseDeltaFiles;
     this.executor = executor;

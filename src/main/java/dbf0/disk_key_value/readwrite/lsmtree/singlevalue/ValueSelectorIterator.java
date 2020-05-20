@@ -2,30 +2,31 @@ package dbf0.disk_key_value.readwrite.lsmtree.singlevalue;
 
 import com.codepoetics.protonpack.StreamUtils;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.PeekingIterator;
+import dbf0.common.io.IOIterator;
+import dbf0.common.io.MergingIOIterator;
+import dbf0.common.io.PeekingIOIterator;
 import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileIterator;
 import dbf0.disk_key_value.readonly.singlevalue.KeyValueFileReader;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.io.IOException;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@VisibleForTesting class ValueSelectorIterator<K, V> implements Iterator<Pair<K, V>> {
+@VisibleForTesting class ValueSelectorIterator<K, V> implements IOIterator<Pair<K, V>> {
 
-  private final PeekingIterator<KeyValueRank<K, V>> sortedIterator;
+  private final PeekingIOIterator<KeyValueRank<K, V>> sortedIterator;
 
-  ValueSelectorIterator(Iterator<KeyValueRank<K, V>> sortedIterator) {
-    this.sortedIterator = Iterators.peekingIterator(sortedIterator);
+  ValueSelectorIterator(IOIterator<KeyValueRank<K, V>> sortedIterator) {
+    this.sortedIterator = new PeekingIOIterator<>(sortedIterator);
   }
 
-  @Override public boolean hasNext() {
+  @Override public boolean hasNext() throws IOException {
     return sortedIterator.hasNext();
   }
 
-  @Override public Pair<K, V> next() {
+  @Override public Pair<K, V> next() throws IOException {
     var first = sortedIterator.next();
     var key = first.key;
     var highestRank = first.rank;
@@ -46,12 +47,12 @@ import java.util.stream.Collectors;
     var rankedIterators = StreamUtils.zipWithIndex(orderedReaders.stream().map(KeyValueFileIterator::new))
         .map(indexedIterator -> addRank(indexedIterator.getValue(), (int) indexedIterator.getIndex()))
         .collect(Collectors.toList());
-    var mergeSortedIterator = Iterators.mergeSorted(rankedIterators, Comparator.comparing(KeyValueRank::getKey, keyComparator));
+    var mergeSortedIterator = new MergingIOIterator<>(rankedIterators, Comparator.comparing(KeyValueRank::getKey, keyComparator));
     return new ValueSelectorIterator<>(mergeSortedIterator);
   }
 
-  static <K, V> Iterator<KeyValueRank<K, V>> addRank(Iterator<Pair<K, V>> iterator, int rank) {
-    return Iterators.transform(iterator, pair -> new KeyValueRank<>(pair.getKey(), pair.getValue(), rank));
+  static <K, V> IOIterator<KeyValueRank<K, V>> addRank(IOIterator<Pair<K, V>> iterator, int rank) {
+    return iterator.map(pair -> new KeyValueRank<>(pair.getKey(), pair.getValue(), rank));
   }
 
   @VisibleForTesting

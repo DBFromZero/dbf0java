@@ -40,7 +40,8 @@ public class MergeSortFiles {
     indexSpecs.forEach(spec -> LOGGER.info("  Index rate " + spec.getRight() + " in " + spec.getLeft()));
 
     var iterators = IntStream.range(0, sortedFilesCount).boxed().map(IOFunction.wrap(index ->
-        new KeyValueFileIterator<>(KeyValueFileReader.forByteArrays(sortedFilesDirectory + "/" + index))))
+        new KeyValueFileIterator<>(KeyValueFileReader.forByteArrays(sortedFilesDirectory + "/" + index))
+            .unchcecked()))
         .collect(Collectors.toList());
     @SuppressWarnings("UnstableApiUsage") var sortedIterator = Iterators.mergeSorted(iterators, Map.Entry.comparingByKey());
 

@@ -43,13 +43,15 @@ public class FixedSizeBackgroundJobCoordinator<X extends Runnable> {
   }
 
   public synchronized void awaitNextJobCompletion() throws InterruptedException {
-    wait();
+    if (!inFlightJobs.isEmpty()) {
+      wait();
+    }
   }
 
   public void waitUntilExecute(X job) throws InterruptedException {
     while (true) {
       synchronized (this) {
-        if (!hasInFlightJobs()) {
+        if (!hasMaxInFlightJobs()) {
           executeInternal(job);
           break;
         }
