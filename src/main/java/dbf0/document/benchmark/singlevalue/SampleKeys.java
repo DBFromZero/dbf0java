@@ -175,7 +175,7 @@ public class SampleKeys {
     return indexLocationsSampler;
   }
 
-  @NotNull static BufferedInputStream createInputStream(File path) throws FileNotFoundException {
+  @NotNull public static BufferedInputStream createInputStream(File path) throws FileNotFoundException {
     return new BufferedInputStream(new FileInputStream(path), 0x8000);
   }
 
