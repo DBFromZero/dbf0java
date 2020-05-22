@@ -1,9 +1,10 @@
 package dbf0.common.io;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import org.jetbrains.annotations.NotNull;
 
-public class SerializationPair<T> {
+public final class SerializationPair<T> {
 
   private final Serializer<T> serializer;
   private final Deserializer<T> deserializer;
@@ -21,4 +22,10 @@ public class SerializationPair<T> {
     return deserializer;
   }
 
+  @Override public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("serializer", serializer)
+        .add("deserializer", deserializer)
+        .toString();
+  }
 }

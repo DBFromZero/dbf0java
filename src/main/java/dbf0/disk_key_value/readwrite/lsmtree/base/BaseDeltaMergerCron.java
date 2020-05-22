@@ -5,6 +5,7 @@ import com.google.common.collect.Streams;
 import dbf0.common.Dbf0Util;
 import dbf0.common.io.PositionTrackingStream;
 import dbf0.disk_key_value.io.FileOperations;
+import dbf0.disk_key_value.readwrite.lsmtree.LsmTreeConfiguration;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
@@ -12,7 +13,6 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -45,9 +45,8 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
   public static final int BUFFER_SIZE = 0x4000;
 
   private final BaseDeltaFiles<T, ?, ?, ?> baseDeltaFiles;
+  private final LsmTreeConfiguration<?, ?> configuration;
   private final ScheduledExecutorService executor;
-  private final Duration checkFrequency;
-  private final double maxDeltaReadPercentage;
   private final Merger merger;
 
   private boolean started = false;
@@ -56,14 +55,12 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
   private ScheduledFuture<?> checkFuture;
 
   public BaseDeltaMergerCron(BaseDeltaFiles<T, ?, ?, ?> baseDeltaFiles,
+                             LsmTreeConfiguration<?, ?> configuration,
                              ScheduledExecutorService executor,
-                             Duration checkFrequency,
-                             double maxDeltaReadPercentage,
                              Merger merger) {
     this.baseDeltaFiles = baseDeltaFiles;
     this.executor = executor;
-    this.checkFrequency = checkFrequency;
-    this.maxDeltaReadPercentage = maxDeltaReadPercentage;
+    this.configuration = configuration;
     this.merger = merger;
   }
 
@@ -112,7 +109,8 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
       checkForDeltasInternal();
       synchronized (this) {
         if (!shutdown) {
-          checkFuture = executor.schedule(this::checkForDeltas, checkFrequency.toMillis(), TimeUnit.MILLISECONDS);
+          checkFuture = executor.schedule(this::checkForDeltas,
+              configuration.getMergeCronFrequency().toMillis(), TimeUnit.MILLISECONDS);
         }
       }
     } catch (ShutdownWhileMerging e) {
@@ -136,6 +134,7 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
 
     var baseOperations = baseDeltaFiles.getBaseOperations();
     var baseSize = baseOperations.length();
+    var maxDeltaReadPercentage = configuration.getMaxDeltaReadPercentage();
     var maxDeltaSize = (long) ((double) baseSize * maxDeltaReadPercentage / (1 - maxDeltaReadPercentage));
     LOGGER.fine(() -> "base size " + Dbf0Util.formatBytes(baseSize) +
         " max delta size " + Dbf0Util.formatBytes(maxDeltaSize));
@@ -165,6 +164,9 @@ public class BaseDeltaMergerCron<T extends OutputStream> {
         LOGGER.warning("Merging base with just the oldest delta would exceed configured threshold. Merging anyways");
       }
       deltaOpsForMerge.add(Pair.of(delta, deltaOps));
+      if (deltaOpsForMerge.size() == configuration.getMaxDeltasPerMerge()) {
+        break;
+      }
       sumDeltaSize = sumWithAddingDelta;
     }
     return deltaOpsForMerge;

@@ -8,20 +8,15 @@ import dbf0.document.types.DElement;
 import dbf0.document.types.DString;
 
 import java.io.FileInputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class DumpKeyCounts {
+public class DumpFiles {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(ParseAndPruneDocuments.class);
 
   public static void main(String[] args) throws Exception {
     Dbf0Util.enableConsoleLogging(Level.FINE, true);
-    var counts = new HashMap<String, Long>(2048);
     for (String path : args) {
       LOGGER.info("Reading " + path);
       try (var stream = new FileInputStream(path)) {
@@ -33,15 +28,10 @@ public class DumpKeyCounts {
           if (dKey == null) {
             break;
           }
-          var count = reader.getValuesCount();
           String key = ((DString) dKey).getValue();
-          counts.put(key, Optional.ofNullable(counts.get(key)).orElse(0L) + count);
-          reader.skipRemainingValues();
+          reader.valueIterator().forEachRemaining(value -> System.out.println(key + "=" + value.getValue()));
         }
       }
     }
-    var acc = new ArrayList<>(counts.entrySet());
-    acc.sort(Map.Entry.comparingByValue());
-    acc.forEach(System.out::println);
   }
 }

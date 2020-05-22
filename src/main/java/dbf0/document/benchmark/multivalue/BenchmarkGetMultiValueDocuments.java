@@ -7,6 +7,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.tdunning.math.stats.TDigest;
 import dbf0.common.Dbf0Util;
+import dbf0.common.ParallelThreads;
 import dbf0.common.io.EndOfStream;
 import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
 import dbf0.disk_key_value.readwrite.MultiValueReadWriteStorage;
@@ -19,6 +20,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -32,12 +34,14 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static dbf0.document.benchmark.multivalue.BenchmarkLoadMultiValueDocuments.createStoreWithBackgroundTasks;
+import static dbf0.document.benchmark.multivalue.MergedPartitionedMultiValueLsmTreeDeltas.readConfig;
 import static dbf0.document.benchmark.singlevalue.BenchmarkLoadDocuments.fileSize;
 
 public class BenchmarkGetMultiValueDocuments {
   private static final Logger LOGGER = Dbf0Util.getLogger(BenchmarkGetMultiValueDocuments.class);
-  public static final List<Integer> BIN_EDGES = List.of(0, 10, 100, 1000, 10 * 1000, 100 * 1000, 1000 * 1000);
-
+  public static final List<Integer> BIN_EDGES = IntStream.range(0, 7).map(i -> (int) Math.pow(10.0, i)).boxed()
+      .collect(Collectors.toList());
 
   public static void main(String[] args) throws Exception {
     Dbf0Util.enableConsoleLogging(Level.FINE, true);
@@ -45,29 +49,18 @@ public class BenchmarkGetMultiValueDocuments {
     var argsItr = Arrays.asList(args).iterator();
     var directory = new File(argsItr.next());
     var keysPath = new File(argsItr.next());
-    var indexRate = Integer.parseInt(argsItr.next());
-    var coreThreads = Integer.parseInt(argsItr.next());
     var getThreads = Integer.parseInt(argsItr.next());
     var duration = Duration.parse(argsItr.next());
+    var reportFrequency = Duration.parse(argsItr.next());
     Preconditions.checkState(!argsItr.hasNext());
     Preconditions.checkState(directory.isDirectory());
     Preconditions.checkState(keysPath.isFile());
 
-    int partitions = countPartitions(directory);
-    Preconditions.checkState(partitions > 0, "zero partitions");
-    var executor = Executors.newScheduledThreadPool(coreThreads);
-    try {
-      var keys = loadKeys(keysPath);
-      runGets(directory, partitions, indexRate, getThreads, duration, keys, executor);
-    } finally {
-      executor.shutdown();
-      executor.awaitTermination(10, TimeUnit.SECONDS);
-    }
+    runGets(directory, getThreads, duration, reportFrequency, loadKeys(keysPath));
   }
 
-  private static int countPartitions(File directory) {
-    return Dbf0Util.safeLongToInt(
-        Arrays.stream(directory.list()).filter(GetKeys::isPartitionFileName).count());
+  static int countPartitions(File directory) {
+    return Dbf0Util.safeLongToInt(Arrays.stream(directory.list()).filter(GetKeys::isPartitionFileName).count());
   }
 
   @NotNull static ArrayList<DString> loadKeys(File keysPath) throws IOException {
@@ -84,44 +77,49 @@ public class BenchmarkGetMultiValueDocuments {
     return keys;
   }
 
-  private static void runGets(File directory, int partitions, int indexRate, int getThreads, Duration duration,
-                              List<DString> keys,
-                              ScheduledExecutorService executor) throws Exception {
-    try (var store = BenchmarkLoadMultiValueDocuments.createStore(100000, indexRate, partitions,
-        new FileDirectoryOperationsImpl(directory), executor)) {
+  @NotNull static MultiValueReadWriteStorage<DElement, DElement> open(File root, ScheduledExecutorService executor)
+      throws IOException {
+    var config = readConfig(new File(root, "config.json"));
+    int pendingWritesMergeThreshold = config.getLeft();
+    int indexRate = config.getRight();
+
+    var partitionDir = new File(root, "partitions");
+    Preconditions.checkState(partitionDir.isDirectory());
+    var partitions = countPartitions(partitionDir);
+    Preconditions.checkState(partitions > 0, "zero partitions");
+
+    return createStoreWithBackgroundTasks(pendingWritesMergeThreshold, indexRate, partitions,
+        new FileDirectoryOperationsImpl(partitionDir), executor);
+  }
+
+  private static void runGets(File root, int getThreads, Duration duration, Duration reportFrequency, List<DString> keys)
+      throws Exception {
+    var executor = Executors.newScheduledThreadPool(
+        Math.max(2, Runtime.getRuntime().availableProcessors() - getThreads - 1));
+    try (var store = open(root, executor)) {
       store.initialize();
       var error = new AtomicBoolean(false);
       var done = new AtomicBoolean(false);
       var gets = new AtomicLong(0);
       var binnedDurationQuantiles = new AtomicReference<>(new BinnedDurationQuantiles(BIN_EDGES));
-      var threads = IntStream.range(0, getThreads).mapToObj(i -> new Thread(() ->
-          getThread(error, done, gets, binnedDurationQuantiles, keys, store)))
-          .collect(Collectors.toList());
+      long startTime;
+      try (var threads = ParallelThreads.create(error, getThreads, i -> new Thread(() ->
+          getThread(error, done, gets, binnedDurationQuantiles, keys, store)))) {
 
-      var startTime = System.nanoTime();
-      var doneFuture = executor.schedule(() -> done.set(true), duration.toMillis(), TimeUnit.MILLISECONDS);
-      var reportFuture = executor.scheduleWithFixedDelay(() ->
-              report(error, gets, directory, startTime, binnedDurationQuantiles),
-          0, 10, TimeUnit.SECONDS);
-      threads.forEach(Thread::start);
+        startTime = System.nanoTime();
+        var doneFuture = executor.schedule(() -> done.set(true), duration.toMillis(), TimeUnit.MILLISECONDS);
+        var reportFuture = executor.scheduleWithFixedDelay(() ->
+                report(error, gets, root, startTime, binnedDurationQuantiles),
+            0, reportFrequency.toMillis(), TimeUnit.MILLISECONDS);
+        threads.start();
+        threads.awaitCompletion();
 
-      while (!error.get() && threads.stream().anyMatch(Thread::isAlive)) {
-        for (var thread : threads) {
-          thread.join(200L);
-        }
+        if (!doneFuture.isDone()) doneFuture.cancel(false);
+        reportFuture.cancel(false);
+
+        if (error.get()) threads.abort();
       }
-
-      if (!doneFuture.isDone()) {
-        doneFuture.cancel(false);
-      }
-
-      reportFuture.cancel(false);
-
-      for (Thread thread : threads) {
-        thread.join();
-      }
-
-      report(error, gets, directory, startTime, binnedDurationQuantiles);
+      report(error, gets, root, startTime, binnedDurationQuantiles);
     }
   }
 
@@ -139,7 +137,7 @@ public class BenchmarkGetMultiValueDocuments {
         .put("time", time)
         .put("gets", gets)
         .put("size", size)
-        .put("stats", b.jsonStats(List.of(0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.0)))
+        .put("stats", b.jsonStats())
         .build();
     System.out.println(new Gson().toJson(stats));
     LOGGER.info(String.format("%s gets=%.3e size=%s",
@@ -194,10 +192,10 @@ public class BenchmarkGetMultiValueDocuments {
       bin.getValue().record(duration);
     }
 
-    public JsonArray jsonStats(Collection<Double> quantiles) {
+    public JsonArray jsonStats() {
       var entries = new JsonArray(bins.size());
       for (var bin : bins.entrySet()) {
-        var entry = bin.getValue().jsonStats(quantiles);
+        var entry = bin.getValue().jsonStats();
         if (entry != null) {
           entry.addProperty("floor", bin.getKey());
           entries.add(entry);
@@ -214,7 +212,7 @@ public class BenchmarkGetMultiValueDocuments {
       tDigest.add(duration);
     }
 
-    @Nullable private synchronized JsonObject jsonStats(Collection<Double> quantiles) {
+    @Nullable private JsonObject jsonStats() {
       var size = tDigest.size();
       if (size == 0) {
         return null;
@@ -222,11 +220,13 @@ public class BenchmarkGetMultiValueDocuments {
       var entry = new JsonObject();
       entry.addProperty("count", size);
 
-      var values = new JsonArray(quantiles.size());
-      for (var q : quantiles) {
-        values.add(tDigest.quantile(q));
+      byte[] bytes;
+      synchronized (this) {
+        bytes = new byte[tDigest.smallByteSize()];
+        tDigest.asSmallBytes(ByteBuffer.wrap(bytes));
       }
-      entry.add("quantiles", values);
+      var base64 = Base64.getEncoder().encodeToString(bytes);
+      entry.addProperty("tDigtest", base64);
 
       return entry;
     }

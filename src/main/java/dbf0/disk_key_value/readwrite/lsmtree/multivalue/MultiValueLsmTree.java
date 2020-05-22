@@ -75,8 +75,8 @@ public class MultiValueLsmTree<T extends OutputStream, K, V>
       var coordinator = new WriteJobCoordinator<T, PutAndDeletes<K, V>, MultiValuePendingWrites<K, V>>(
           baseDeltaFiles, executorService, null,
           new SortAndWriteKeyMultiValues<>(configuration, valueComparator), configuration.getMaxInFlightWriteJobs());
-      var mergerCron = new BaseDeltaMergerCron<>(baseDeltaFiles, executorService, configuration.getMergeCronFrequency(),
-          configuration.getMaxDeltaReadPercentage(), new MultiValueLsmTreeMerger<>(configuration, valueComparator));
+      var mergerCron = new BaseDeltaMergerCron<>(baseDeltaFiles, configuration, executorService,
+          new MultiValueLsmTreeMerger<>(configuration, valueComparator));
       return Pair.of(new MultiValueLsmTree<>(configuration, valueComparator, baseDeltaFiles, coordinator, mergerCron),
           executorService);
     }

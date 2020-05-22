@@ -76,8 +76,8 @@ public class LsmTree<T extends OutputStream, K, V>
       var coordinator = new WriteJobCoordinator<T, Map<K, V>, PendingWritesAndLog<K, V>>(
           baseDeltaFiles, executorService, writeAheadLog,
           new SortAndWriteKeyValues<>(configuration), configuration.getMaxInFlightWriteJobs());
-      var mergerCron = new BaseDeltaMergerCron<>(baseDeltaFiles, executorService, configuration.getMergeCronFrequency(),
-          configuration.getMaxDeltaReadPercentage(), LsmTreeMerger.create(configuration));
+      var mergerCron = new BaseDeltaMergerCron<>(baseDeltaFiles, configuration, executorService,
+          LsmTreeMerger.create(configuration));
       return Pair.of(new LsmTree<>(configuration, baseDeltaFiles, coordinator, mergerCron, writeAheadLog),
           executorService);
     }
@@ -144,7 +144,7 @@ public class LsmTree<T extends OutputStream, K, V>
     super.initialize();
   }
 
-  @Override public long size() throws IOException {
+  @Override public long size() {
     throw new RuntimeException("not implemented");
   }
 
@@ -203,7 +203,7 @@ public class LsmTree<T extends OutputStream, K, V>
   }
 
   @Override protected PendingWritesAndLog<K, V> createNewPendingWrites() throws IOException {
-    return new PendingWritesAndLog<K, V>(new HashMap<>(configuration.getPendingWritesDeltaThreshold()),
+    return new PendingWritesAndLog<>(new HashMap<>(configuration.getPendingWritesDeltaThreshold()),
         writeAheadLog, writeAheadLog == null ? null : writeAheadLog.createWriter());
   }
 
@@ -241,7 +241,7 @@ public class LsmTree<T extends OutputStream, K, V>
   }
 
   private void createPendingWritesForReadingWal() {
-    pendingWrites = new PendingWritesAndLog<K, V>(new HashMap<>(configuration.getPendingWritesDeltaThreshold()));
+    pendingWrites = new PendingWritesAndLog<>(new HashMap<>(configuration.getPendingWritesDeltaThreshold()));
   }
 
   @Nullable private V searchForKeyInWritesInProgress(K key) {

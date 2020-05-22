@@ -85,7 +85,7 @@ public class GetKeys {
     LOGGER.info("Loading " + file.getPath());
     try (var reader = KeyMultiValueFileReader.bufferStream(
         DElementDeserializer.defaultCharsetInstance(),
-        ValueWrapper.serializationPair(DElement.sizePrefixedSerializationPair())
+        ValueWrapper.serializationPair(DElement.serializationPair())
             .getDeserializer(),
         new FileInputStream(file))) {
       var keys = new ArrayList<DElement>(Dbf0Util.safeLongToInt(file.length() / 1024L));
