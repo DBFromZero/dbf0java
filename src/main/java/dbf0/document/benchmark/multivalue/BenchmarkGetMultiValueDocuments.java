@@ -100,16 +100,17 @@ public class BenchmarkGetMultiValueDocuments {
       store.initialize();
       var error = new AtomicBoolean(false);
       var done = new AtomicBoolean(false);
-      var gets = new AtomicLong(0);
+      var getKeys = new AtomicLong(0);
+      var getValues = new AtomicLong(0);
       var binnedDurationQuantiles = new AtomicReference<>(new BinnedDurationQuantiles(BIN_EDGES));
       long startTime;
       try (var threads = ParallelThreads.create(error, getThreads, i -> new Thread(() ->
-          getThread(error, done, gets, binnedDurationQuantiles, keys, store)))) {
+          getThread(error, done, getKeys, getValues, binnedDurationQuantiles, keys, store)))) {
 
         startTime = System.nanoTime();
         var doneFuture = executor.schedule(() -> done.set(true), duration.toMillis(), TimeUnit.MILLISECONDS);
         var reportFuture = executor.scheduleWithFixedDelay(() ->
-                report(error, gets, root, startTime, binnedDurationQuantiles),
+                report(error, getKeys, getValues, root, startTime, binnedDurationQuantiles),
             0, reportFrequency.toMillis(), TimeUnit.MILLISECONDS);
         threads.start();
         threads.awaitCompletion();
@@ -119,11 +120,11 @@ public class BenchmarkGetMultiValueDocuments {
 
         if (error.get()) threads.abort();
       }
-      report(error, gets, root, startTime, binnedDurationQuantiles);
+      report(error, getKeys, getValues, root, startTime, binnedDurationQuantiles);
     }
   }
 
-  private static void report(AtomicBoolean error, AtomicLong atomicGets,
+  private static void report(AtomicBoolean error, AtomicLong atomicGetsKeys, AtomicLong atomicGetsValues,
                              File directory, long startTime,
                              AtomicReference<BinnedDurationQuantiles> binnedDurationQuantiles) {
     if (error.get()) {
@@ -132,21 +133,24 @@ public class BenchmarkGetMultiValueDocuments {
     var b = binnedDurationQuantiles.getAndSet(new BinnedDurationQuantiles(BIN_EDGES));
     var time = System.nanoTime();
     var size = fileSize(directory);
-    var gets = Math.max(0L, atomicGets.get());
+    var getKeys = atomicGetsKeys.get();
+    var getValues = atomicGetsValues.get();
     var stats = ImmutableMap.<String, Object>builder()
         .put("time", time)
-        .put("gets", gets)
+        .put("getKeys", getKeys)
+        .put("getValues", getValues)
         .put("size", size)
         .put("stats", b.jsonStats())
         .build();
     System.out.println(new Gson().toJson(stats));
-    LOGGER.info(String.format("%s gets=%.3e size=%s",
+    LOGGER.info(String.format("%s getKeys=%.3e getValues=%.3e size=%s",
         Duration.ofNanos(time - startTime),
-        (double) gets,
+        (double) getKeys, (double) getValues,
         Dbf0Util.formatBytes(size)));
   }
 
-  private static void getThread(AtomicBoolean error, AtomicBoolean done, AtomicLong gets,
+  private static void getThread(AtomicBoolean error, AtomicBoolean done,
+                                AtomicLong atomicGetsKeys, AtomicLong atomicGetsValues,
                                 AtomicReference<BinnedDurationQuantiles> binnedDurationQuantiles, List<DString> keys,
                                 MultiValueReadWriteStorage<DElement, DElement> store) {
     try {
@@ -166,7 +170,8 @@ public class BenchmarkGetMultiValueDocuments {
           }
         }
         long durationNs = System.nanoTime() - start;
-        gets.getAndIncrement();
+        atomicGetsKeys.getAndIncrement();
+        atomicGetsValues.getAndAdd(count);
         double durationMs = (double) durationNs / 1e6;
         binnedDurationQuantiles.get().record(count, durationMs);
       }
@@ -226,7 +231,7 @@ public class BenchmarkGetMultiValueDocuments {
         tDigest.asSmallBytes(ByteBuffer.wrap(bytes));
       }
       var base64 = Base64.getEncoder().encodeToString(bytes);
-      entry.addProperty("tDigtest", base64);
+      entry.addProperty("tDigest", base64);
 
       return entry;
     }
