@@ -16,15 +16,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import static dbf0.disk_key_value.readwrite.lsmtree.multivalue.MVLUtil.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class SortWriteAndReadTest {
-
-  private static final Logger LOGGER = Dbf0Util.getLogger(SortWriteAndReadTest.class);
+public class LsmTreeSortWriteAndReadTest {
 
   private static final SortAndWriteKeyMultiValues<String, Integer> JOB =
       new SortAndWriteKeyMultiValues<>(CONFIGURATION, Integer::compareTo);

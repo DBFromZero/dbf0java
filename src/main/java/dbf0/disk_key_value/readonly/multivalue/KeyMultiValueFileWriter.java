@@ -44,5 +44,4 @@ public class KeyMultiValueFileWriter<K, V> extends BaseKeyValueFileWriter<K, V> 
   public void writeKeysAndValues(K key, Collection<? extends V> values) throws IOException {
     writeKeysAndValues(key, values.size(), IOIterator.of(values.iterator()));
   }
-
 }

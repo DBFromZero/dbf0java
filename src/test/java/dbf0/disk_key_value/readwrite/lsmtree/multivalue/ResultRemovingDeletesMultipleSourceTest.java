@@ -10,7 +10,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -19,14 +18,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ResultRemovingDeletesMultipleSourceTest {
 
-  private static final Logger LOGGER = Dbf0Util.getLogger(MultiValueSelectorIteratorTest.class);
   private static final Comparator<Integer> VALUE_COMPARATOR = Integer::compareTo;
 
   private static final ValueWrapper<Integer> PUT_1 = put(1);
   private static final ValueWrapper<Integer> PUT_2 = put(2);
   private static final ValueWrapper<Integer> DEL_1 = del(1);
 
-  @Before public void setUp() throws Exception {
+  @Before public void setUp() {
     Dbf0Util.enableConsoleLogging(Level.FINER, true);
   }
 
@@ -130,7 +128,8 @@ public class ResultRemovingDeletesMultipleSourceTest {
         .collect(Collectors.toList()), VALUE_COMPARATOR);
   }
 
-  private static ResultRemovingDeletesMultipleSource<Integer> result(List<ValueWrapper<Integer>>... results) {
+  @SafeVarargs private static ResultRemovingDeletesMultipleSource<Integer>
+  result(List<ValueWrapper<Integer>>... results) {
     return result(List.of(results));
   }
 

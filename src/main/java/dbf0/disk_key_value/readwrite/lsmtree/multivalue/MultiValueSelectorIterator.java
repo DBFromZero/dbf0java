@@ -131,5 +131,4 @@ import java.util.stream.Collectors;
       return values.valueIterator().map(value -> new ValueRank<>(value, rank));
     }
   }
-
 }

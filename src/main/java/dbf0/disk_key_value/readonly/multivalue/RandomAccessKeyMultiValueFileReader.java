@@ -19,25 +19,28 @@ public class RandomAccessKeyMultiValueFileReader<K, V> extends
     super(index, keyComparator, readerSupplier);
   }
 
-  public static <K, V> RandomAccessKeyMultiValueFileReader<K, V> open(Deserializer<K> keyDeserializer,
-                                                                      Deserializer<V> valueDeserializer,
-                                                                      Comparator<K> keyComparator,
-                                                                      ReadOnlyFileOperations fileOperations,
-                                                                      ReadOnlyFileOperations indexFileOperations) throws IOException {
+  public static <K, V> RandomAccessKeyMultiValueFileReader<K, V>
+  open(Deserializer<K> keyDeserializer,
+       Deserializer<V> valueDeserializer,
+       Comparator<K> keyComparator,
+       ReadOnlyFileOperations fileOperations,
+       ReadOnlyFileOperations indexFileOperations) throws IOException {
     return new RandomAccessKeyMultiValueFileReader<>(
-        readIndex(indexIterator(keyDeserializer, indexFileOperations.createInputStream()), keyComparator),
+        readIndex(indexIterator(keyDeserializer, indexFileOperations.createInputStream()),
+            keyComparator),
         keyComparator,
         readerSupplier(keyDeserializer, valueDeserializer, fileOperations)
     );
   }
 
-  public static <K, V> IOSupplier<KeyMultiValueFileReader<K, V>> readerSupplier(Deserializer<K> keyDeserializer,
-                                                                                Deserializer<V> valueDeserializer,
-                                                                                ReadOnlyFileOperations fileOperations) {
+  public static <K, V> IOSupplier<KeyMultiValueFileReader<K, V>>
+  readerSupplier(Deserializer<K> keyDeserializer,
+                 Deserializer<V> valueDeserializer,
+                 ReadOnlyFileOperations fileOperations) {
     return () ->
-        KeyMultiValueFileReader.bufferStream(keyDeserializer, valueDeserializer, fileOperations.createInputStream());
+        KeyMultiValueFileReader.bufferStream(keyDeserializer, valueDeserializer,
+            fileOperations.createInputStream());
   }
-
 
   protected boolean scanForKey(K key, KeyMultiValueFileReader<K, V> reader) throws IOException {
     while (true) {

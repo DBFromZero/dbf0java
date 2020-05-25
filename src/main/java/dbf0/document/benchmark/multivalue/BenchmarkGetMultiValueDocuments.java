@@ -47,16 +47,44 @@ public class BenchmarkGetMultiValueDocuments {
     Dbf0Util.enableConsoleLogging(Level.FINE, true);
 
     var argsItr = Arrays.asList(args).iterator();
-    var directory = new File(argsItr.next());
+    var root = new File(argsItr.next());
     var keysPath = new File(argsItr.next());
     var getThreads = Integer.parseInt(argsItr.next());
     var duration = Duration.parse(argsItr.next());
     var reportFrequency = Duration.parse(argsItr.next());
     Preconditions.checkState(!argsItr.hasNext());
-    Preconditions.checkState(directory.isDirectory());
+    Preconditions.checkState(root.isDirectory());
     Preconditions.checkState(keysPath.isFile());
 
-    runGets(directory, getThreads, duration, reportFrequency, loadKeys(keysPath));
+    var keys = loadKeys(keysPath);
+    var executor = Executors.newScheduledThreadPool(
+        Math.max(2, Runtime.getRuntime().availableProcessors() - getThreads - 1));
+    try (var store = open(root, executor)) {
+      store.initialize();
+      var error = new AtomicBoolean(false);
+      var done = new AtomicBoolean(false);
+      var getKeys = new AtomicLong(0);
+      var getValues = new AtomicLong(0);
+      var binnedDurationQuantiles = new AtomicReference<>(new BinnedDurationQuantiles(BIN_EDGES));
+      long startTime;
+      try (var threads = ParallelThreads.create(error, getThreads, i -> new Thread(() ->
+          getThread(error, done, getKeys, getValues, binnedDurationQuantiles, keys, store)))) {
+
+        startTime = System.nanoTime();
+        var doneFuture = executor.schedule(() -> done.set(true), duration.toMillis(), TimeUnit.MILLISECONDS);
+        var reportFuture = executor.scheduleWithFixedDelay(() ->
+                report(error, getKeys, getValues, root, startTime, binnedDurationQuantiles),
+            0, reportFrequency.toMillis(), TimeUnit.MILLISECONDS);
+        threads.start();
+        threads.awaitCompletion();
+
+        if (!doneFuture.isDone()) doneFuture.cancel(false);
+        reportFuture.cancel(false);
+
+        if (error.get()) threads.abort();
+      }
+      report(error, getKeys, getValues, root, startTime, binnedDurationQuantiles);
+    }
   }
 
   static int countPartitions(File directory) {
@@ -90,38 +118,6 @@ public class BenchmarkGetMultiValueDocuments {
 
     return createStoreWithBackgroundTasks(pendingWritesMergeThreshold, indexRate, partitions,
         new FileDirectoryOperationsImpl(partitionDir), executor);
-  }
-
-  private static void runGets(File root, int getThreads, Duration duration, Duration reportFrequency, List<DString> keys)
-      throws Exception {
-    var executor = Executors.newScheduledThreadPool(
-        Math.max(2, Runtime.getRuntime().availableProcessors() - getThreads - 1));
-    try (var store = open(root, executor)) {
-      store.initialize();
-      var error = new AtomicBoolean(false);
-      var done = new AtomicBoolean(false);
-      var getKeys = new AtomicLong(0);
-      var getValues = new AtomicLong(0);
-      var binnedDurationQuantiles = new AtomicReference<>(new BinnedDurationQuantiles(BIN_EDGES));
-      long startTime;
-      try (var threads = ParallelThreads.create(error, getThreads, i -> new Thread(() ->
-          getThread(error, done, getKeys, getValues, binnedDurationQuantiles, keys, store)))) {
-
-        startTime = System.nanoTime();
-        var doneFuture = executor.schedule(() -> done.set(true), duration.toMillis(), TimeUnit.MILLISECONDS);
-        var reportFuture = executor.scheduleWithFixedDelay(() ->
-                report(error, getKeys, getValues, root, startTime, binnedDurationQuantiles),
-            0, reportFrequency.toMillis(), TimeUnit.MILLISECONDS);
-        threads.start();
-        threads.awaitCompletion();
-
-        if (!doneFuture.isDone()) doneFuture.cancel(false);
-        reportFuture.cancel(false);
-
-        if (error.get()) threads.abort();
-      }
-      report(error, getKeys, getValues, root, startTime, binnedDurationQuantiles);
-    }
   }
 
   private static void report(AtomicBoolean error, AtomicLong atomicGetsKeys, AtomicLong atomicGetsValues,
