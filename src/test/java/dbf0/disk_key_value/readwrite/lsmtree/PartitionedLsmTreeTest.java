@@ -7,6 +7,7 @@ import dbf0.disk_key_value.io.MemoryFileDirectoryOperations;
 import dbf0.disk_key_value.io.ReadOnlyFileOperations;
 import dbf0.disk_key_value.readwrite.HashPartitionedReadWriteStorage;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
+import dbf0.disk_key_value.readwrite.lsmtree.singlevalue.LsmTree;
 import dbf0.test.KnownKeyRate;
 import dbf0.test.PutDeleteGet;
 import dbf0.test.RandomSeed;
@@ -107,13 +108,15 @@ public class PartitionedLsmTreeTest {
     var executor = Executors.newScheduledThreadPool(4);
     var store = HashPartitionedReadWriteStorage.create(4,
         partition -> {
-          var tree = LsmTree.builderForTesting(directoryOperations.subDirectory(String.valueOf(partition)))
-              .withPendingWritesDeltaThreshold(pendingWritesDeltaThreshold)
+          var tree = LsmTree.builderForTesting(directoryOperations.subDirectory(String.valueOf(partition)),
+              LsmTreeConfiguration.builderForBytes()
+                  .withPendingWritesDeltaThreshold(pendingWritesDeltaThreshold)
+                  .withIndexRate(10)
+                  .withMaxInFlightWriteJobs(10)
+                  .withMaxDeltaReadPercentage(0.5)
+                  .withMergeCronFrequency(Duration.ofMillis(100))
+                  .build())
               .withScheduledExecutorService(executor)
-              .withIndexRate(10)
-              .withMaxInFlightWriteJobs(10)
-              .withMaxDeltaReadPercentage(0.5)
-              .withMergeCronFrequency(Duration.ofMillis(100))
               .build();
           tree.initialize();
           return tree;

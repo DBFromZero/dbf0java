@@ -7,6 +7,8 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Spliterators;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.logging.*;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -105,5 +107,13 @@ public class Dbf0Util {
       throw new IllegalArgumentException("Cannot safely convert " + l + " to an integer");
     }
     return i;
+  }
+
+  public static <X> X getUnchecked(CompletableFuture<X> f) {
+    try {
+      return f.get();
+    } catch (InterruptedException | ExecutionException e) {
+      throw new RuntimeException(e);
+    }
   }
 }

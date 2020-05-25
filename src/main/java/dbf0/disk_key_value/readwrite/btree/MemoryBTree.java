@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import java.io.IOException;
 import java.util.stream.Stream;
 
 public class MemoryBTree<K extends Comparable<K>, V> implements BTree<K, V> {
@@ -17,6 +18,9 @@ public class MemoryBTree<K extends Comparable<K>, V> implements BTree<K, V> {
   @VisibleForTesting MemoryBTree(MemoryBTeeStorage<K, V> storage) {
     this.storage = storage;
     root = storage.createLeaf();
+  }
+
+  @Override public void close() throws IOException {
   }
 
   @Override public long size() {

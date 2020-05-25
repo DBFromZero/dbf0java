@@ -98,14 +98,14 @@ public class IOUtilTest {
   }
 
   @Test public void testSingleRoundTrip() {
-    IntStream.range(0, LOWER_7BITS_SET).boxed().forEach(IoConsumer.wrap(
+    IntStream.range(0, LOWER_7BITS_SET).boxed().forEach(IOConsumer.wrap(
         i -> assertThat(readInt(writeInt(i))).isEqualTo(i)
     ));
   }
 
   @Test public void testTwoRoundTrip() {
     var random = random();
-    IntStream.range(0, 10).boxed().forEach(IoConsumer.wrap(i -> {
+    IntStream.range(0, 10).boxed().forEach(IOConsumer.wrap(i -> {
       var x = random.nextInt(LOWER_7BITS_SET << 7) + LOWER_7BITS_SET;
       assertThat(readInt(writeInt(x))).isEqualTo(x);
     }));
@@ -113,7 +113,7 @@ public class IOUtilTest {
 
   @Test public void testLargeIntRoundTrip() {
     var random = random();
-    IntStream.range(0, 10).boxed().forEach(IoConsumer.wrap(i -> {
+    IntStream.range(0, 10).boxed().forEach(IOConsumer.wrap(i -> {
       var x = Math.abs(random.nextInt());
       assertThat(readInt(writeInt(x))).isEqualTo(x);
     }));
@@ -121,13 +121,23 @@ public class IOUtilTest {
 
   @Test public void testLongRoundTrip() {
     var random = random();
-    IntStream.range(0, 10).boxed().forEach(IoConsumer.wrap(i -> {
+    IntStream.range(0, 10).boxed().forEach(IOConsumer.wrap(i -> {
       var x = Math.abs(random.nextLong());
       var s = new ByteArrayOutputStream();
       IOUtil.writeVariableLengthUnsignedLong(s, x);
       var r = IOUtil.readVariableLengthUnsignedLong(new ByteArrayInputStream(s.toByteArray()));
       assertThat(r).isEqualTo(x);
     }));
+  }
+
+  @Test public void testIntReadEmptyStream() {
+    assertThatThrownBy(() -> readInt(bw())).isInstanceOf(EndOfStream.class);
+  }
+
+  @Test public void testIntReadInsufficientInputStream() throws IOException {
+    var full = writeInt(13242343);
+    var partial = full.slice(0, full.length() - 1);
+    assertThatThrownBy(() -> readInt(partial)).isInstanceOf(EndOfStream.class);
   }
 
   @Test public void testWriteEmpty() throws IOException {
@@ -139,9 +149,13 @@ public class IOUtilTest {
   }
 
   @Test public void testReadEmptyStream() {
-    assertThatThrownBy(() -> read(bw()))
-        .isInstanceOf(EndOfStream.class)
-        .hasMessage("Unexpected end of input stream");
+    assertThatThrownBy(() -> read(bw())).isInstanceOf(EndOfStream.class);
+  }
+
+  @Test public void testReadInsufficientInputStream() throws IOException {
+    var full = write(bw(1));
+    var partial = full.slice(0, full.length() - 1);
+    assertThatThrownBy(() -> read(partial)).isInstanceOf(EndOfStream.class);
   }
 
   @Test public void testRoundTripEmpty() throws IOException {
@@ -164,7 +178,7 @@ public class IOUtilTest {
 
   @Test public void testRoundTripTwoPrefix() {
     var random = random();
-    IntStream.range(0, 10).boxed().forEach(IoConsumer.wrap(i -> {
+    IntStream.range(0, 10).boxed().forEach(IOConsumer.wrap(i -> {
       var bw = randomBw(random.nextInt(0xFF00) + 0xFF);
       var w = write(bw);
       var r = read(w);

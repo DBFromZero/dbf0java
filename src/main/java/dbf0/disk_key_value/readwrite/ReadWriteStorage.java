@@ -5,10 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nullable;
 import java.io.IOException;
 
-public interface ReadWriteStorage<K, V> {
-
-  default void initialize() throws IOException {
-  }
+public interface ReadWriteStorage<K, V> extends BaseReadWriteStorage<K, V> {
 
   long size() throws IOException;
 

@@ -11,14 +11,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
-public class ReadWriteStorageWithBackgroundTasks<K, V> implements CloseableReadWriteStorage<K, V> {
+public class ReadWriteStorageWithBackgroundTasks<K, V> implements ReadWriteStorage<K, V> {
 
   private static final Logger LOGGER = Dbf0Util.getLogger(ReadWriteStorageWithBackgroundTasks.class);
 
-  private final CloseableReadWriteStorage<K, V> delegate;
+  private final ReadWriteStorage<K, V> delegate;
   private final ExecutorService executorService;
 
-  public ReadWriteStorageWithBackgroundTasks(CloseableReadWriteStorage<K, V> delegate,
+  public ReadWriteStorageWithBackgroundTasks(ReadWriteStorage<K, V> delegate,
                                              ExecutorService executorService) {
     this.delegate = delegate;
     this.executorService = executorService;

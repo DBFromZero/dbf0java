@@ -2,6 +2,7 @@ package dbf0.common;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.jetbrains.annotations.NotNull;
 
@@ -26,6 +27,14 @@ public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
       bytes[i] = (byte) ints[i];
     }
     return of(bytes);
+  }
+
+  public static ByteArrayWrapper fromHex(String hex) {
+    try {
+      return of(Hex.decodeHex(hex.toCharArray()));
+    } catch (DecoderException e) {
+      throw new IllegalArgumentException("Bad hex string " + hex, e);
+    }
   }
 
   public static ByteArrayWrapper cat(ByteArrayWrapper... bws) {

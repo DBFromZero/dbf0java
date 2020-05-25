@@ -1,6 +1,7 @@
 package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Preconditions;
+import dbf0.common.io.IOExceptionWrapper;
 import dbf0.disk_key_value.readwrite.blocks.BlockStorage;
 import dbf0.disk_key_value.readwrite.blocks.MetadataMap;
 import org.jetbrains.annotations.NotNull;
@@ -190,9 +191,4 @@ public class BlockBTreeStorage<K extends Comparable<K>, V> extends BaseBTreeStor
     }
   }
 
-  static class IOExceptionWrapper extends RuntimeException {
-    public IOExceptionWrapper(IOException cause) {
-      super(cause);
-    }
-  }
 }

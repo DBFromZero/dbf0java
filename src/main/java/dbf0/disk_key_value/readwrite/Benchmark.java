@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import dbf0.common.ByteArrayWrapper;
 import dbf0.common.Dbf0Util;
+import dbf0.common.InterruptedExceptionWrapper;
 import dbf0.common.ReservoirSampler;
 import dbf0.disk_key_value.io.DeprecatedSerializationHelper;
 import dbf0.disk_key_value.io.FileDirectoryOperationsImpl;
@@ -16,8 +17,8 @@ import dbf0.disk_key_value.readwrite.btree.*;
 import dbf0.disk_key_value.readwrite.log.FrequencyLogSynchronizer;
 import dbf0.disk_key_value.readwrite.log.ImmediateLogSynchronizer;
 import dbf0.disk_key_value.readwrite.log.WriteAheadLog;
-import dbf0.disk_key_value.readwrite.lsmtree.InterruptedExceptionWrapper;
-import dbf0.disk_key_value.readwrite.lsmtree.LsmTree;
+import dbf0.disk_key_value.readwrite.lsmtree.LsmTreeConfiguration;
+import dbf0.disk_key_value.readwrite.lsmtree.singlevalue.LsmTree;
 import dbf0.test.PutDeleteGet;
 import org.apache.commons.lang3.StringUtils;
 
@@ -86,9 +87,9 @@ public class Benchmark {
     }
   }
 
-  static CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> createStorage(
+  static ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> createStorage(
       Iterator<String> argsItr, File file, String type) throws IOException {
-    CloseableReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage;
+    ReadWriteStorage<ByteArrayWrapper, ByteArrayWrapper> storage;
     switch (type) {
       case "btree":
         storage = createBTree(argsItr, file);
@@ -236,14 +237,16 @@ public class Benchmark {
     directoryOps.mkdirs();
     directoryOps.clear();
 
-    var tree = LsmTree.builderForDirectory(directoryOps)
-        .withPendingWritesDeltaThreshold(pendingWritesMergeThreshold)
+    var tree = LsmTree.builderForDirectory(directoryOps,
+        LsmTreeConfiguration.builderForBytes()
+            .withPendingWritesDeltaThreshold(pendingWritesMergeThreshold)
+            .withIndexRate(indexRate)
+            .withMaxInFlightWriteJobs(20)
+            .withMaxDeltaReadPercentage(0.75)
+            .withMergeCronFrequency(Duration.ofSeconds(1))
+            .build())
         .withScheduledExecutorService(executorService)
         .withWriteAheadLog(writeAheadLog)
-        .withIndexRate(indexRate)
-        .withMaxInFlightWriteJobs(20)
-        .withMaxDeltaReadPercentage(0.75)
-        .withMergeCronFrequency(Duration.ofSeconds(1))
         .build();
 
     tree.initialize();
