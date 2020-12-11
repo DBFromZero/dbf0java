@@ -23,7 +23,7 @@ public abstract class DElement implements Comparable<DElement> {
     var thisType = getType();
     var thatType = o.getType();
     if (thisType != thatType) {
-      return Integer.compare(thatType.getTypeCode(), thatType.getTypeCode());
+      return Integer.compare(thisType.getTypeCode(), thatType.getTypeCode());
     }
     return compareToSameType(o);
   }
