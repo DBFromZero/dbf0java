@@ -232,7 +232,6 @@ public class LsmTree<T extends OutputStream, K, V>
 
           @Override public void persist() throws IOException {
             sendWritesToCoordinator();
-            coordinator.addWrites(pendingWrites);
             createPendingWritesForReadingWal();
           }
         };
