@@ -1,12 +1,15 @@
 package dbf0.disk_key_value.readwrite.btree;
 
 import com.google.common.base.Joiner;
+import dbf0.common.Dbf0Util;
 import dbf0.disk_key_value.readwrite.ReadWriteStorageTester;
 import dbf0.test.*;
 import org.junit.Assume;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +26,10 @@ abstract class BaseBTreeTest {
     if (isDebug()) {
       System.out.println(Joiner.on(" ").join(args));
     }
+  }
+
+  @Before public void setUp() {
+    Dbf0Util.enableConsoleLogging(Level.WARNING, true);
   }
 
   @Test public void testEmpty() throws IOException {
